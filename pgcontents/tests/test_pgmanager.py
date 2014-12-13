@@ -15,46 +15,28 @@
 """
 Tests for PostgresContentsManager.
 """
-
-
-from unittest import TestCase
-
-from IPython.nbformat import v4 as nbformat
-from IPython.html.services.contents.tests.test_manager import TestFileContentsManager
+from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
 
 from ..pgmanager import PostgresContentsManager
 
-from unittest import TestCase
+
+class PostgresContentsManagerTestCase(TestContentsManager):
+
+    def setUp(self):
+        self.contents_manager = PostgresContentsManager(
+            user_id='test',
+        )
+        self.contents_manager.purge()
+        self.contents_manager.ensure_user()
+
+    def tearDown(self):
+        self.contents_manager.purge()
+
+    def make_dir(self, api_path):
+        self.contents_manager.new(
+            model={'type': 'directory'},
+            path=api_path,
+        )
 
 
-# class PostgresContentsManagerTestCase(TestCase):
-
-#     def setUp(self):
-#         self.contents_manager = PostgresContentsManager()
-
-#     def tearDown(self):
-#         pass
-
-#     def add_code_cell(self, nb):
-#         output = nbformat.new_output(
-#             "display_data",
-#             {'application/javascript': "alert('hi');"},
-#         )
-#         cell = nbformat.new_code_cell("print('hi')", outputs=[output])
-#         nb.cells.append(cell)
-
-#     def new_notebook(self):
-#         cm = self.contents_manager
-#         model = cm.new_untitled(type='notebook')
-#         name = model['name']
-#         path = model['path']
-
-#         full_model = cm.get(path)
-#         nb = full_model['content']
-#         self.add_code_cell(nb)
-
-#         cm.save(full_model, path)
-#         return nb, name, path
-
-#     def test_nothing(self):
-#         pass
+del TestContentsManager

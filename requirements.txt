@@ -19,3 +19,4 @@ pyzmq==14.4.1
 tornado==4.0.2
 wmctrl==0.1
 wsgiref==0.1.2
+flake8==2.2.5

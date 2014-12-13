@@ -14,35 +14,30 @@
 # limitations under the License.
 
 from __future__ import unicode_literals
-from collections import namedtuple
 from itertools import izip
 
 from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
-    Enum,
     ForeignKey,
     ForeignKeyConstraint,
-    Integer,
     LargeBinary,
     MetaData,
     Table,
     Unicode,
-    UniqueConstraint,
     and_,
     desc,
     func,
     null,
     select,
 )
-from sqlalchemy.exc import IntegrityError
 
 from db_utils import ignore_unique_violation
 
 metadata = MetaData()
 
-
+# Shared Types
 UserID = Unicode(30)
 DirectoryName = Unicode(70)
 
@@ -66,7 +61,13 @@ way to determine if a directory is a child of another directory.
 directories = Table(
     'directories',
     metadata,
-    Column('user_id', UserID, ForeignKey(users.c.id), nullable=False, primary_key=True),
+    Column(
+        'user_id',
+        UserID,
+        ForeignKey(users.c.id),
+        nullable=False,
+        primary_key=True
+    ),
     Column('name', DirectoryName, nullable=False, primary_key=True),
     Column('parent_user_id', UserID, nullable=True),
     Column('parent_name', DirectoryName, nullable=True),
@@ -103,7 +104,13 @@ notebooks = Table(
     'notebooks',
     metadata,
     Column('name', Unicode(40), nullable=False, primary_key=True),
-    Column('user_id', UserID, ForeignKey(users.c.id), nullable=False, primary_key=True),
+    Column(
+        'user_id',
+        UserID,
+        ForeignKey(users.c.id),
+        nullable=False,
+        primary_key=True,
+    ),
     Column('parent_name', DirectoryName, nullable=False),
     Column('content', LargeBinary(100000), nullable=False),
     Column(
@@ -117,6 +124,7 @@ notebooks = Table(
         ['directories.user_id', 'directories.name'],
     ),
 )
+
 
 def _from_api_dirname(api_dirname):
     if api_dirname == '':
@@ -140,7 +148,7 @@ def split_api_path(path):
     return _from_api_dirname(dirname), name
 
 
-def adduser_idempotent(db, user_id):
+def ensure_db_user(db, user_id):
     """
     Add a new user if they don't already exist.
     """
@@ -150,14 +158,14 @@ def adduser_idempotent(db, user_id):
         )
 
 
-def ensure_root_dir(db, user_id):
+def ensure_directory(db, user_id, dirname):
     """
-    Ensure that the given user has a root directory.
+    Ensure that the given user has the given directory.
     """
     with ignore_unique_violation():
         db.execute(
             directories.insert().values(
-                name='/',
+                name=_from_api_dirname(dirname),
                 user_id=user_id,
                 parent_name=null(),
                 parent_user_id=null(),
@@ -168,7 +176,11 @@ def ensure_root_dir(db, user_id):
 def to_dict(fields, row):
     """
     Convert a SQLAlchemy row to a dict.
+
+    If row is None, return None.
     """
+    if row is None:
+        return None
     assert(len(fields) == len(row))
     return {
         field.name: value
@@ -203,6 +215,13 @@ def get_notebook(db, user_id, path, include_content):
     return to_dict(query_fields, result)
 
 
+def notebook_exists(db, user_id, path):
+    """
+    Check if a notebook exists.
+    """
+    return get_notebook(db, user_id, path, include_content=False) is None
+
+
 def save_notebook(db, user_id, path, content):
     """
     Save a notebook.
@@ -219,7 +238,7 @@ def save_notebook(db, user_id, path, content):
     return res
 
 
-def dir_exists(db, dirname, user_id):
+def dir_exists(db, user_id, dirname):
     """
     Check if a directory exists.
     """
@@ -236,24 +255,30 @@ def dir_exists(db, dirname, user_id):
     ).scalar() != 0
 
 
+def _listdir_files(dirname, user_id):
+    return notebooks.c.parent_name == dirname & notebooks.c.user_id == user_id
+
+
+def _listdir_directories(dirname, user_id):
+    return (directories.c.parent_name == dirname &
+            directories.c.user_id == user_id)
+
+
 def listdir(db, dirname, user_id):
     """
     Return file/directory names.
     """
-    # file_query = _listdir_files(dirname, user_id)
-    # dir_query = _listdir_directories(dirname, user_id)
-    # return db.execute(
-    #     select(file_query)
-    # )
-    # query = db.execute(
-    #     select(
-    #         [notebooks.c.name],
-    #     ).where(
-    #         and_(
-    #             notebooks.c.dirname == dirname,
-    #             notebooks.c.user_id == user_id,
-    #         ),
-    #     ).union_all(
-    #     )
-    # )
-    # return list(query)
+    file_query = _listdir_files(dirname, user_id)
+    dir_query = _listdir_directories(dirname, user_id)
+    return db.execute(
+        select(file_query)
+    )
+    query = db.execute(
+        select(
+            [notebooks.c.name],
+        ).where(
+            file_query & dir_query
+        ).union_all(
+        )
+    )
+    return list(query)
