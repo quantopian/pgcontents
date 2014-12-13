@@ -1,6 +1,5 @@
 from __future__ import unicode_literals
 from collections import namedtuple
-from enum.enum import Enum as PyEnum
 from itertools import izip
 
 from sqlalchemy import (
@@ -29,21 +28,8 @@ from db_utils import ignore_unique_violation
 metadata = MetaData()
 
 
-class Filetype(object):
-    notebook = 'notebook'
-    directory = 'directory'
-    file = 'file'
-
-
 UserID = Unicode(30)
 DirectoryName = Unicode(70)
-FileTypeEnum = Enum(
-    Filetype.notebook,
-    Filetype.directory,
-    Filetype.file,
-    name='notebook_filetype',
-)
-
 
 users = Table(
     'users',
