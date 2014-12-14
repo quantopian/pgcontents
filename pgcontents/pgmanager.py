@@ -41,6 +41,8 @@ from sqlalchemy.engine.base import Engine
 from tornado import web
 
 from schema import (
+    delete_directory,
+    delete_file,
     dir_exists,
     directories,
     ensure_db_user,
@@ -48,6 +50,7 @@ from schema import (
     get_notebook,
     listdir,
     notebooks,
+    rename_file,
     save_notebook,
     users,
 )
@@ -323,10 +326,36 @@ class PostgresContentsManager(ContentsManager):
         ensure_directory(db, self.user_id, path)
 
     def update(self, model, path):
-        raise NotImplementedError()
+        """
+        Update the file's path
+
+        For use in PATCH requests, to enable renaming a file without
+        re-uploading its contents. Only used for renaming at the moment.
+        """
+        # NOTE: This implementation is identical to the one in
+        # FileContentsManager.
+        new_path = model.get('path', path)
+        if path != new_path:
+            self.rename(path, new_path)
+        model = self.get(new_path, content=False)
+        return model
+
+    def rename(self, old_path, path):
+        """
+        Rename a file.
+        """
+        with self.engine.begin() as db:
+            rename_file(db, self.user_id, old_path, path)
 
     def delete(self, path):
-        raise NotImplementedError()
+        """
+        Delete file at path.
+        """
+        with self.engine.begin() as db:
+            if self.file_exists(path):
+                delete_file(path)
+            if self.dir_exists(path):
+                raise NotImplementedError()
 
     def create_checkpoint(self, path):
         raise NotImplementedError()

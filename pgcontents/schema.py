@@ -15,6 +15,7 @@
 
 from __future__ import unicode_literals
 from itertools import izip
+from textwrap import dedent
 
 from sqlalchemy import (
     CheckConstraint,
@@ -22,6 +23,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Integer,
     LargeBinary,
     MetaData,
     Table,
@@ -103,13 +105,13 @@ directories = Table(
 notebooks = Table(
     'notebooks',
     metadata,
-    Column('name', Unicode(40), nullable=False, primary_key=True),
+    Column('id', Integer(), nullable=False, primary_key=True),
+    Column('name', Unicode(40), nullable=False),
     Column(
         'user_id',
         UserID,
         ForeignKey(users.c.id),
         nullable=False,
-        primary_key=True,
     ),
     Column('parent_name', DirectoryName, nullable=False),
     Column('content', LargeBinary(100000), nullable=False),
@@ -130,7 +132,12 @@ def _from_api_dirname(api_dirname):
     if api_dirname == '':
         return '/'
     else:
-        return '/' + api_dirname + '/'
+        # Ensure that the dirname starts and ends with exactly one '/'.
+        return ''.join([
+            '' if api_dirname.startswith('/') else '/',
+            api_dirname,
+            '' if api_dirname.endswith('/') else '/',
+        ])
 
 
 def split_api_path(path):
@@ -215,11 +222,49 @@ def get_notebook(db, user_id, path, include_content):
     return to_dict(query_fields, result)
 
 
+def delete_file(*args, **kwargs):
+    raise NotImplementedError()
+
+
+def delete_directory(*args, **kwargs):
+    raise NotImplementedError()
+
+
 def notebook_exists(db, user_id, path):
     """
     Check if a notebook exists.
     """
     return get_notebook(db, user_id, path, include_content=False) is None
+
+
+def rename_file(db, user_id, old_path, new_path):
+    """
+    Rename a file. The file must stay in the same directory.
+
+    TODO: Consider allowing renames to existing directories.
+    TODO: Don't do anything if paths are the same.
+    """
+    old_dir, old_name = split_api_path(old_path)
+    new_dir, new_name = split_api_path(new_path)
+    if not old_dir == new_dir:
+        raise ValueError(
+            dedent(
+                """
+                Can't rename file to new directory.
+                Old Path: {old_path}
+                New Path: {new_path}
+                """.format(old_path=old_path, new_path=new_path)
+            )
+        )
+
+    db.execute(
+        notebooks.update().where(
+            (notebooks.c.user_id == user_id)
+            & (notebooks.c.parent_name == new_dir)
+        ).values(
+            name=new_name,
+        )
+    )
 
 
 def save_notebook(db, user_id, path, content):

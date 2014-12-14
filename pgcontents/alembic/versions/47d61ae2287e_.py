@@ -1,13 +1,13 @@
 """empty message
 
-Revision ID: 40c2c891ec3a
+Revision ID: 47d61ae2287e
 Revises: 
-Create Date: 2014-12-12 15:35:30.137931
+Create Date: 2014-12-14 15:14:36.132836
 
 """
 
 # revision identifiers, used by Alembic.
-revision = '40c2c891ec3a'
+revision = '47d61ae2287e'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -30,7 +30,6 @@ def upgrade():
     sa.CheckConstraint(u"left(name, 1) = '/'"),
     sa.CheckConstraint(u"length(regexp_replace(name, '[^/]+', '', 'g')) - 1= length(regexp_replace(parent_name, '[^/]+', '', 'g'))"),
     sa.CheckConstraint(u"right(name, 1) = '/'"),
-    sa.CheckConstraint(u"right(name, 1) = '/'"),
     sa.CheckConstraint(u'(parent_name IS NULL AND parent_user_id IS NULL) OR (parent_name IS NOT NULL AND parent_user_id IS NOT NULL)'),
     sa.CheckConstraint(u'position(parent_name in name) != 0'),
     sa.CheckConstraint(u'user_id = parent_user_id'),
@@ -39,6 +38,7 @@ def upgrade():
     sa.PrimaryKeyConstraint('user_id', 'name')
     )
     op.create_table('notebooks',
+    sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.Unicode(length=40), nullable=False),
     sa.Column('user_id', sa.Unicode(length=30), nullable=False),
     sa.Column('parent_name', sa.Unicode(length=70), nullable=False),
@@ -46,7 +46,7 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['user_id', 'parent_name'], [u'directories.user_id', u'directories.name'], ),
     sa.ForeignKeyConstraint(['user_id'], [u'users.id'], ),
-    sa.PrimaryKeyConstraint('name', 'user_id')
+    sa.PrimaryKeyConstraint('id')
     )
     ### end Alembic commands ###
 

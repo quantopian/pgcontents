@@ -23,9 +23,7 @@ from ..pgmanager import PostgresContentsManager
 class PostgresContentsManagerTestCase(TestContentsManager):
 
     def setUp(self):
-        self.contents_manager = PostgresContentsManager(
-            user_id='test',
-        )
+        self.contents_manager = PostgresContentsManager(user_id='test')
         self.contents_manager.purge()
         self.contents_manager.ensure_user()
 
