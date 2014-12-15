@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from __future__ import unicode_literals
-from itertools import chain, izip
+from itertools import izip
 from textwrap import dedent
 
 from sqlalchemy import (
@@ -67,6 +67,9 @@ way to determine if a directory is a child of another directory.
 directories = Table(
     'directories',
     metadata,
+    # ======= #
+    # Columns #
+    # ======= #
     Column(
         'user_id',
         UserID,
@@ -77,6 +80,10 @@ directories = Table(
     Column('name', DirectoryName, nullable=False, primary_key=True),
     Column('parent_user_id', UserID, nullable=True),
     Column('parent_name', DirectoryName, nullable=True),
+
+    # =========== #
+    # Constraints #
+    # =========== #
     ForeignKeyConstraint(
         ['parent_user_id', 'parent_name'],
         ['directories.user_id', 'directories.name'],
@@ -90,7 +97,7 @@ directories = Table(
         "position(parent_name in name) != 0",
         name='directories_parent_name_prefix',
     ),
-    # Assert that all directories do not begin or end with '/'.
+    # Assert that all directories begin or end with '/'.
     CheckConstraint(
         "left(name, 1) = '/'",
         name='directories_startwith_slash',
@@ -149,6 +156,8 @@ notebooks = Table(
 def from_api_dirname(api_dirname):
     """
     Convert API-style directory name into the format stored in the database.
+
+    TODO: Implement this with a SQLAlchemy TypeDecorator.
     """
     # Special case for root directory.
     if api_dirname == '':
@@ -165,6 +174,8 @@ def from_api_dirname(api_dirname):
 def to_api_path(db_path):
     """
     Convert database path into API-style path.
+
+    TODO: Implement this with a SQLAlchemy TypeDecorator.
     """
     return db_path.strip('/')
 
@@ -243,17 +254,33 @@ def _notebook_where(user_id, api_path):
     )
 
 
+def _notebook_default_fields():
+    """
+    Default fields returned by a notebook query.
+    """
+    return [
+        notebooks.c.name,
+        notebooks.c.created_at,
+        notebooks.c.parent_name,
+    ]
+
+
+def _directory_default_fields():
+    """
+    Default fields returned by a notebook query.
+    """
+    return [
+        directories.c.name,
+    ]
+
+
 def get_notebook(db, user_id, api_path, include_content):
     """
     Get notebook data for the given user_id and path.
 
     Include content only if include_content=True.
     """
-    query_fields = [
-        notebooks.c.name,
-        notebooks.c.created_at,
-        notebooks.c.parent_name,
-    ]
+    query_fields = _notebook_default_fields()
     if include_content:
         query_fields.append(notebooks.c.content)
 
@@ -298,13 +325,7 @@ def delete_directory(db, user_id, api_path):
 
     TODO: Consider making this a soft delete.
     """
-    pass
-    # directory, name = split_api_filepath(path)
-    # db.execute(
-    #     directories.delete().where(
-    #         directories.c.id ==
-    #     )
-    # )
+    raise NotImplementedError()
 
 
 def notebook_exists(db, user_id, path):
@@ -385,16 +406,16 @@ def _dir_exists(db, user_id, db_dirname):
     ).scalar() != 0
 
 
-def _directory_contents(db, table, user_id, db_dirname):
+def _directory_contents(db, table, fields, user_id, db_dirname):
     """
     Return names of entries in the given directory.
 
-    Parameterized by table because this has the same structure for notebooks
-    and directories.
+    Parameterized by table/fields because this has the same query structure for
+    notebooks and directories.
     """
     rows = db.execute(
         select(
-            [table.c.name],
+            fields,
         ).where(
             and_(
                 table.c.parent_name == db_dirname,
@@ -402,18 +423,41 @@ def _directory_contents(db, table, user_id, db_dirname):
             )
         )
     )
-    return (row[0] for row in rows)
+    return [to_dict(fields, row) for row in rows]
 
 
-def listdir(db, user_id, api_dirname):
+def get_directory(db, user_id, api_dirname, content):
     """
     Return the names of all files/directories that are direct children of
     api_dirname.
+
+    If content is False, return a bare model containing just a database-style
+    name.
     """
     db_dirname = from_api_dirname(api_dirname)
     if not _dir_exists(db, user_id, db_dirname):
         raise NoSuchDirectory(api_dirname)
+    if content:
+        files = _directory_contents(
+            db,
+            notebooks,
+            _notebook_default_fields(),
+            user_id,
+            db_dirname,
+        )
+        subdirectories = _directory_contents(
+            db,
+            directories,
+            _directory_default_fields(),
+            user_id,
+            db_dirname,
+        )
+    else:
+        files, subdirectories = None, None
 
-    files = _directory_contents(db, notebooks, user_id, db_dirname)
-    subdirectories = _directory_contents(db, directories, user_id, db_dirname)
-    return chain(files, subdirectories)
+    # TODO: Consider using namedtuples for these return values.
+    return {
+        'name': db_dirname,
+        'files': files,
+        'subdirs': subdirectories,
+    }

@@ -21,6 +21,10 @@ from base64 import (
     b64encode,
     encodestring,
 )
+from datetime import datetime
+from getpass import getuser
+from itertools import chain
+
 import mimetypes
 
 from IPython.nbformat import (
@@ -52,7 +56,7 @@ from .schema import (
     ensure_db_user,
     ensure_directory,
     get_notebook,
-    listdir,
+    get_directory,
     notebooks,
     rename_file,
     save_notebook,
@@ -60,7 +64,9 @@ from .schema import (
     users,
 )
 
-
+# We don't currently track created/modified dates for directories, so this
+# value is always used instead.
+DUMMY_CREATED_DATE = datetime.fromtimestamp(0)
 NBFORMAT_VERSION = 4
 
 
@@ -129,7 +135,9 @@ class PostgresContentsManager(ContentsManager):
     local filesystem.
     """
     db_url = Unicode(
-        default_value="postgresql://ssanderson@/pgcontents",
+        default_value="postgresql://{user}@/pgcontents".format(
+            user=getuser(),
+        ),
         help="Connection string for the database.",
     )
 
@@ -226,34 +234,71 @@ class PostgresContentsManager(ContentsManager):
             return 'file'
 
     def _get_notebook(self, path, content, format):
-        model = self._base_model(path)
-        model['type'] = 'notebook'
+        """
+        Get a notebook from the database.
+        """
         with self.engine.begin() as db:
             try:
                 nb = get_notebook(db, self.user_id, path, content)
             except NoSuchFile:
                 self.no_such_file(path)
 
+        return self._notebook_model_from_db(nb, content)
+
+    def _notebook_model_from_db(self, nb, content):
+        """
+        Build a notebook model from database record.
+        """
+        path = to_api_path(nb['parent_name'] + nb['name'])
+        model = self._base_model(path)
+        model['type'] = 'notebook'
+        model['last_modified'] = model['created'] = nb['created_at']
         if content:
             content = reads_base64(nb['content'])
             self.mark_trusted_cells(content, path)
             model['content'] = content
             model['format'] = 'json'
-            model['last_modified'] = model['created'] = nb['created_at']
-            model['path'] = to_api_path(nb['parent_name'] + nb['name'])
             self.validate_notebook_model(model)
         return model
 
     def _get_directory(self, path, content, format):
-        model = self._base_model(path)
-        model['type'] = 'directory'
-        if content:
-            with self.engine.begin() as db:
-                try:
-                    model['content'] = list(listdir(db, self.user_id, path))
-                except NoSuchDirectory:
-                    self.no_such_directory(path)
+        """
+        Get a directory from the database.
+        """
+        with self.engine.begin() as db:
+            try:
+                db_dir = get_directory(
+                    db, self.user_id, path, content
+                )
+            except NoSuchDirectory:
+                self.no_such_directory(path)
 
+        return self._directory_model_from_db(db_dir, content)
+
+    def _directory_model_from_db(self, db_dir, content):
+        """
+        Build a directory model from a list of database records.
+        """
+        model = self._base_model(to_api_path(db_dir['name']))
+        model['type'] = 'directory'
+        # TODO: Track directory modifications and fill in a real value for
+        # this.
+        model['last_modified'] = model['created'] = DUMMY_CREATED_DATE
+
+        if content:
+            model['format'] = 'json'
+            model['content'] = list(
+                chain(
+                    (
+                        self._notebook_model_from_db(nb, False)
+                        for nb in db_dir['files']
+                    ),
+                    (
+                        self._directory_model_from_db(subdir, False)
+                        for subdir in db_dir['subdirs']
+                    ),
+                )
+            )
         return model
 
     def _get_file(self, path, content, format):
@@ -368,8 +413,6 @@ class PostgresContentsManager(ContentsManager):
         if self.file_exists(path):
             self._delete_file(path)
         elif self.dir_exists(path):
-            # IPython's spec doesn't actually allow this, but it's straightforward
-            # for us to implement as an extension to the spec.
             self._delete_directory(path)
         else:
             self.no_such_file(path)
