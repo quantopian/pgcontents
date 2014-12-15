@@ -85,8 +85,9 @@ def reads_base64(nb, as_version=NBFORMAT_VERSION):
 
 
 def _decode_text_from_base64(path, bcontent):
+    content = b64decode(content)
     try:
-        return (bcontent.decode('utf-8'), 'text')
+        return (content.decode('utf-8'), 'text')
     except UnicodeError:
         raise web.HTTPError(
             400,
@@ -95,11 +96,12 @@ def _decode_text_from_base64(path, bcontent):
 
 
 def _decode_unknown_from_base64(path, bcontent):
+    content = b64decode(bcontent)
     try:
-        return (bcontent.decode('utf-8'), 'text')
+        return (content.decode('utf-8'), 'text')
     except UnicodeError:
         pass
-    return encodestring(bcontent).decode('ascii'), 'base64'
+    return bcontent.decode('ascii'), 'base64'
 
 
 def from_b64(path, bcontent, format):
@@ -114,7 +116,7 @@ def from_b64(path, bcontent, format):
     Returns a triple of decoded_content, format, and mimetype.
     """
     decoders = {
-        'base64': lambda path, content: (content, 'base64'),
+        'base64': lambda path, bcontent: (bcontent.decode('ascii'), 'base64'),
         'text': _decode_text_from_base64,
         None: _decode_unknown_from_base64,
     }
@@ -211,7 +213,6 @@ class PostgresContentsManager(ContentsManager):
         }
 
     def get(self, path, content=True, type=None, format=None):
-
         if type is None:
             type = self.guess_type(path)
 
