@@ -138,12 +138,14 @@ class PostgresContentsManager(ContentsManager):
         default_value="postgresql://{user}@/pgcontents".format(
             user=getuser(),
         ),
+        config=True,
         help="Connection string for the database.",
     )
 
     user_id = Unicode(
-        default_value="ssanderson",
-        help="Username for the server we're managing."
+        default_value=getuser(),
+        config=True,
+        help="Username for the server we're managing.",
     )
 
     engine = Instance(Engine)
