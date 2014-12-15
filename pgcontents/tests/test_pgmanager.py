@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Tests for PostgresContentsManager.
+Run IPython's TestContentsManager using PostgresContentsManager.
 """
 from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
 
@@ -37,4 +37,5 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         )
 
 
+# This needs to be removed or else we'll run the main IPython tests as well.
 del TestContentsManager
