@@ -254,6 +254,19 @@ def _notebook_where(user_id, api_path):
     )
 
 
+def _is_in_directory(table, user_id, db_dirname):
+    """
+    Return a WHERE clause that matches entries in a directory.
+
+    Parameterized on table because this clause is re-used between files and
+    directories.
+    """
+    return and_(
+        table.c.parent_name == db_dirname,
+        table.c.user_id == user_id,
+    )
+
+
 def _notebook_default_fields():
     """
     Default fields returned by a notebook query.
@@ -426,6 +439,42 @@ def _directory_contents(db, table, fields, user_id, db_dirname):
     return [to_dict(fields, row) for row in rows]
 
 
+def files_in_directory(db, user_id, db_dirname):
+    """
+    Return files in a directory.
+    """
+    fields = _notebook_default_fields()
+    rows = db.execute(
+        select(
+            fields,
+        ).where(
+            _is_in_directory(notebooks, user_id, db_dirname),
+        ).order_by(
+            notebooks.c.user_id,
+            notebooks.c.parent_name,
+            notebooks.c.created_at,
+        ).distinct(
+            notebooks.c.user_id, notebooks.c.parent_name,
+        )
+    )
+    return [to_dict(fields, row) for row in rows]
+
+
+def directories_in_directory(db, user_id, db_dirname):
+    """
+    Return subdirectories of a directory.
+    """
+    fields = _directory_default_fields()
+    rows = db.execute(
+        select(
+            fields,
+        ).where(
+            _is_in_directory(directories, user_id, db_dirname),
+        )
+    )
+    return [to_dict(fields, row) for row in rows]
+
+
 def get_directory(db, user_id, api_dirname, content):
     """
     Return the names of all files/directories that are direct children of
@@ -438,17 +487,13 @@ def get_directory(db, user_id, api_dirname, content):
     if not _dir_exists(db, user_id, db_dirname):
         raise NoSuchDirectory(api_dirname)
     if content:
-        files = _directory_contents(
+        files = files_in_directory(
             db,
-            notebooks,
-            _notebook_default_fields(),
             user_id,
             db_dirname,
         )
-        subdirectories = _directory_contents(
+        subdirectories = directories_in_directory(
             db,
-            directories,
-            _directory_default_fields(),
             user_id,
             db_dirname,
         )
