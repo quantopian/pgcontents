@@ -367,12 +367,18 @@ class PostgresContentsManager(ContentsManager):
         """
         if self.file_exists(path):
             self._delete_file(path)
-        if self.dir_exists(path):
+        elif self.dir_exists(path):
+            # IPython's spec doesn't actually allow this, but it's straightforward
+            # for us to implement as an extension to the spec.
             self._delete_directory(path)
+        else:
+            self.no_such_file(path)
 
     def _delete_file(self, path):
         with self.engine.begin() as db:
-            delete_file(db, self.user_id, path)
+            deleted_count = delete_file(db, self.user_id, path)
+            if not deleted_count:
+                self.no_such_file(path)
 
     def _delete_directory(self, path):
         with self.engine.begin() as db:
