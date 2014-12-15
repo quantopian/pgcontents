@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from __future__ import unicode_literals
-from itertools import izip
+from itertools import chain, izip
 from textwrap import dedent
 
 from sqlalchemy import (
@@ -36,6 +36,10 @@ from sqlalchemy import (
 )
 
 from db_utils import ignore_unique_violation
+from .error import (
+    NoSuchDirectory,
+    NoSuchFile,
+)
 
 metadata = MetaData()
 
@@ -77,16 +81,29 @@ directories = Table(
         ['parent_user_id', 'parent_name'],
         ['directories.user_id', 'directories.name'],
     ),
-    CheckConstraint('user_id = parent_user_id'),
+    CheckConstraint(
+        'user_id = parent_user_id',
+        name='directories_match_user_id',
+    ),
     # Assert that parent_name is a prefix of name.
-    CheckConstraint("position(parent_name in name) != 0"),
-    # Assert that all directories begin and end with /.
-    CheckConstraint("left(name, 1) = '/'"),
-    CheckConstraint("right(name, 1) = '/'"),
+    CheckConstraint(
+        "position(parent_name in name) != 0",
+        name='directories_parent_name_prefix',
+    ),
+    # Assert that all directories do not begin or end with '/'.
+    CheckConstraint(
+        "left(name, 1) = '/'",
+        name='directories_startwith_slash',
+    ),
+    CheckConstraint(
+        "right(name, 1) = '/'",
+        name='directories_endwith_slash',
+    ),
     # Assert that the name of this directory has one more '/' than its parent.
     CheckConstraint(
         "length(regexp_replace(name, '[^/]+', '', 'g')) - 1"
-        "= length(regexp_replace(parent_name, '[^/]+', '', 'g'))"
+        "= length(regexp_replace(parent_name, '[^/]+', '', 'g'))",
+        name='directories_slash_count',
     ),
     # Assert that parent_user_id is NULL iff parent_name is NULL.  This should
     # be true only for each user's root directory.
@@ -97,7 +114,8 @@ directories = Table(
                 ' OR ',
                 '(parent_name IS NOT NULL AND parent_user_id IS NOT NULL)'
             ],
-        )
+        ),
+        name='directories_null_user_id_match',
     ),
 )
 
@@ -128,31 +146,42 @@ notebooks = Table(
 )
 
 
-def _from_api_dirname(api_dirname):
+def from_api_dirname(api_dirname):
+    """
+    Convert API-style directory name into the format stored in the database.
+    """
+    # Special case for root directory.
     if api_dirname == '':
         return '/'
-    else:
-        # Ensure that the dirname starts and ends with exactly one '/'.
-        return ''.join([
+    return ''.join(
+        [
             '' if api_dirname.startswith('/') else '/',
             api_dirname,
             '' if api_dirname.endswith('/') else '/',
-        ])
+        ]
+    )
 
 
-def split_api_path(path):
+def to_api_path(db_path):
     """
-    Split an API path into directory and name.
+    Convert database path into API-style path.
+    """
+    return db_path.strip('/')
+
+
+def split_api_filepath(path):
+    """
+    Split an API file path into directory and name.
     """
     parts = path.rsplit('/', 1)
     if len(parts) == 1:
         name = parts[0]
-        dirname = ''
+        dirname = '/'
     else:
         name = parts[1]
-        dirname = parts[0]
+        dirname = parts[0] + '/'
 
-    return _from_api_dirname(dirname), name
+    return from_api_dirname(dirname), name
 
 
 def ensure_db_user(db, user_id):
@@ -165,17 +194,26 @@ def ensure_db_user(db, user_id):
         )
 
 
-def ensure_directory(db, user_id, dirname):
+def ensure_directory(db, user_id, api_path):
     """
     Ensure that the given user has the given directory.
     """
+    name = from_api_dirname(api_path)
+    if name == '/':
+        parent_name = null()
+        parent_user_id = null()
+    else:
+        # Convert '/foo/bar/buzz/' -> '/foo/bar/'
+        parent_name = name[:name.rindex('/', 0, -1) + 1]
+        parent_user_id = user_id
+
     with ignore_unique_violation():
         db.execute(
             directories.insert().values(
-                name=_from_api_dirname(dirname),
+                name=name,
                 user_id=user_id,
-                parent_name=null(),
-                parent_user_id=null(),
+                parent_name=parent_name,
+                parent_user_id=parent_user_id,
             )
         )
 
@@ -186,8 +224,6 @@ def to_dict(fields, row):
 
     If row is None, return None.
     """
-    if row is None:
-        return None
     assert(len(fields) == len(row))
     return {
         field.name: value
@@ -195,39 +231,80 @@ def to_dict(fields, row):
     }
 
 
-def get_notebook(db, user_id, path, include_content):
+def _notebook_where(user_id, api_path):
+    """
+    Return a WHERE clause matching the given API path and user_id.
+    """
+    directory, name = split_api_filepath(api_path)
+    return and_(
+        notebooks.c.name == name,
+        notebooks.c.user_id == user_id,
+        notebooks.c.parent_name == directory,
+    )
+
+
+def get_notebook(db, user_id, api_path, include_content):
     """
     Get notebook data for the given user_id and path.
 
     Include content only if include_content=True.
     """
-    directory, name = split_api_path(path)
-    query_fields = [notebooks.c.name, notebooks.c.created_at]
+    query_fields = [
+        notebooks.c.name,
+        notebooks.c.created_at,
+        notebooks.c.parent_name,
+    ]
     if include_content:
         query_fields.append(notebooks.c.content)
 
     result = db.execute(
         select(query_fields).where(
-            and_(
-                notebooks.c.name == name,
-                notebooks.c.user_id == user_id,
-                notebooks.c.parent_name == directory,
-            )
+            _notebook_where(user_id, api_path),
         ).order_by(
             desc(notebooks.c.created_at)
         ).limit(
             1
         )
     ).first()
+
+    if result is None:
+        raise NoSuchFile(api_path)
     return to_dict(query_fields, result)
 
 
-def delete_file(*args, **kwargs):
-    raise NotImplementedError()
+def delete_file(db, user_id, api_path):
+    """
+    Delete a file.
+
+    TODO: Consider making this a soft delete.
+    """
+    directory, name = split_api_filepath(api_path)
+    result = db.execute(
+        notebooks.delete().where(
+            _notebook_where(user_id, api_path)
+        )
+    )
+    if not result.rowcount:
+        raise NoSuchFile(api_path)
+
+    # TODO: This is misleading because we allow multiple files with the same
+    # user_id/name as checkpoints.  Consider de-duping this in some way?
+    return result.rowcount
 
 
-def delete_directory(*args, **kwargs):
-    raise NotImplementedError()
+def delete_directory(db, user_id, api_path):
+    """
+    Delete a directory.
+
+    TODO: Consider making this a soft delete.
+    """
+    pass
+    # directory, name = split_api_filepath(path)
+    # db.execute(
+    #     directories.delete().where(
+    #         directories.c.id ==
+    #     )
+    # )
 
 
 def notebook_exists(db, user_id, path):
@@ -244,8 +321,8 @@ def rename_file(db, user_id, old_path, new_path):
     TODO: Consider allowing renames to existing directories.
     TODO: Don't do anything if paths are the same.
     """
-    old_dir, old_name = split_api_path(old_path)
-    new_dir, new_name = split_api_path(new_path)
+    old_dir, old_name = split_api_filepath(old_path)
+    new_dir, new_name = split_api_filepath(new_path)
     if not old_dir == new_dir:
         raise ValueError(
             dedent(
@@ -271,7 +348,7 @@ def save_notebook(db, user_id, path, content):
     """
     Save a notebook.
     """
-    directory, name = split_api_path(path)
+    directory, name = split_api_filepath(path)
     res = db.execute(
         notebooks.insert().values(
             name=name,
@@ -283,47 +360,60 @@ def save_notebook(db, user_id, path, content):
     return res
 
 
-def dir_exists(db, user_id, dirname):
+def dir_exists(db, user_id, api_dirname):
     """
     Check if a directory exists.
     """
-    dirname = _from_api_dirname(dirname)
+    return _dir_exists(db, user_id, from_api_dirname(api_dirname))
+
+
+def _dir_exists(db, user_id, db_dirname):
+    """
+    Internal implementation of dir_exists.
+
+    Expects a db-style path name.
+    """
     return db.execute(
         select(
             [func.count(directories.c.name)],
         ).where(
             and_(
                 directories.c.user_id == user_id,
-                directories.c.name == dirname,
+                directories.c.name == db_dirname,
             ),
         )
     ).scalar() != 0
 
 
-def _listdir_files(dirname, user_id):
-    return notebooks.c.parent_name == dirname & notebooks.c.user_id == user_id
-
-
-def _listdir_directories(dirname, user_id):
-    return (directories.c.parent_name == dirname &
-            directories.c.user_id == user_id)
-
-
-def listdir(db, dirname, user_id):
+def _directory_contents(db, table, user_id, db_dirname):
     """
-    Return file/directory names.
+    Return names of entries in the given directory.
+
+    Parameterized by table because this has the same structure for notebooks
+    and directories.
     """
-    file_query = _listdir_files(dirname, user_id)
-    dir_query = _listdir_directories(dirname, user_id)
-    return db.execute(
-        select(file_query)
-    )
-    query = db.execute(
+    rows = db.execute(
         select(
-            [notebooks.c.name],
+            [table.c.name],
         ).where(
-            file_query & dir_query
-        ).union_all(
+            and_(
+                table.c.parent_name == db_dirname,
+                table.c.user_id == user_id,
+            )
         )
     )
-    return list(query)
+    return (row[0] for row in rows)
+
+
+def listdir(db, user_id, api_dirname):
+    """
+    Return the names of all files/directories that are direct children of
+    api_dirname.
+    """
+    db_dirname = from_api_dirname(api_dirname)
+    if not _dir_exists(db, user_id, db_dirname):
+        raise NoSuchDirectory(api_dirname)
+
+    files = _directory_contents(db, notebooks, user_id, db_dirname)
+    subdirectories = _directory_contents(db, directories, user_id, db_dirname)
+    return chain(files, subdirectories)

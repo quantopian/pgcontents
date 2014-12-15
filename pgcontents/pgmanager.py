@@ -40,7 +40,11 @@ from sqlalchemy import (
 from sqlalchemy.engine.base import Engine
 from tornado import web
 
-from schema import (
+from .error import (
+    NoSuchDirectory,
+    NoSuchFile,
+)
+from .schema import (
     delete_directory,
     delete_file,
     dir_exists,
@@ -52,6 +56,7 @@ from schema import (
     notebooks,
     rename_file,
     save_notebook,
+    to_api_path,
     users,
 )
 
@@ -174,7 +179,11 @@ class PostgresContentsManager(ContentsManager):
 
     def file_exists(self, path):
         with self.engine.begin() as db:
-            return get_notebook(db, self.user_id, path, include_content=False)
+            try:
+                get_notebook(db, self.user_id, path, include_content=False)
+                return True
+            except NoSuchFile:
+                return False
 
     def _base_model(self, path):
         """
@@ -220,7 +229,10 @@ class PostgresContentsManager(ContentsManager):
         model = self._base_model(path)
         model['type'] = 'notebook'
         with self.engine.begin() as db:
-            nb = get_notebook(db, self.user_id, path, content)
+            try:
+                nb = get_notebook(db, self.user_id, path, content)
+            except NoSuchFile:
+                self.no_such_file(path)
 
         if content:
             content = reads_base64(nb['content'])
@@ -228,6 +240,7 @@ class PostgresContentsManager(ContentsManager):
             model['content'] = content
             model['format'] = 'json'
             model['last_modified'] = model['created'] = nb['created_at']
+            model['path'] = to_api_path(nb['parent_name'] + nb['name'])
             self.validate_notebook_model(model)
         return model
 
@@ -236,11 +249,10 @@ class PostgresContentsManager(ContentsManager):
         model['type'] = 'directory'
         if content:
             with self.engine.begin() as db:
-                model['content'] = listdir(db, path, self.user_id)
-                if model['content'] is None:
-                    self.do_404(u'directory not found %s' % path)
-        elif not self.dir_exists(path):
-            self.do_404(u'directory not found %s' % path)
+                try:
+                    model['content'] = list(listdir(db, self.user_id, path))
+                except NoSuchDirectory:
+                    self.no_such_directory(path)
 
         return model
 
@@ -248,12 +260,12 @@ class PostgresContentsManager(ContentsManager):
         model = self._base_model(path)
         model['type'] = 'file'
         with self.engine.begin() as db:
-            # TODO: Rename this to get_file or somesuch.
-            nb = get_notebook(db, self.user_id, path, content)
+            try:
+                nb = get_notebook(db, self.user_id, path, content)
+            except NoSuchFile:
+                self.no_such_file(path)
         if content:
             bcontent = nb['content']
-            if bcontent is None:
-                self.do_404(u'file not found %s' % path)
             model['content'], model['format'], model['mimetype'] = from_b64(
                 path,
                 bcontent,
@@ -266,6 +278,8 @@ class PostgresContentsManager(ContentsManager):
             raise web.HTTPError(400, u'No file type provided')
         if 'content' not in model and model['type'] != 'directory':
             raise web.HTTPError(400, u'No file content provided')
+
+        path = path.strip('/')
 
         # Almost all of this is duplicated with FileContentsManager :(.
         self.log.debug("Saving %s", path)
@@ -351,11 +365,18 @@ class PostgresContentsManager(ContentsManager):
         """
         Delete file at path.
         """
+        if self.file_exists(path):
+            self._delete_file(path)
+        if self.dir_exists(path):
+            self._delete_directory(path)
+
+    def _delete_file(self, path):
         with self.engine.begin() as db:
-            if self.file_exists(path):
-                delete_file(path)
-            if self.dir_exists(path):
-                raise NotImplementedError()
+            delete_file(db, self.user_id, path)
+
+    def _delete_directory(self, path):
+        with self.engine.begin() as db:
+            delete_directory(db, self.user_id, path)
 
     def create_checkpoint(self, path):
         raise NotImplementedError()
@@ -366,6 +387,16 @@ class PostgresContentsManager(ContentsManager):
     def restore_checkpoint(self, checkpoint_id, path):
         raise NotImplementedError()
     # End ContentsManager API.
+
+    def no_such_file(self, path):
+        self.do_404(
+            "No such file: [{path}]".format(path=path)
+        )
+
+    def no_such_directory(self, path):
+        self.do_404(
+            "No such directory: [{path}]".format(path=path)
+        )
 
     def do_404(self, msg):
         raise web.HTTPError(404, msg)

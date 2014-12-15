@@ -1,13 +1,13 @@
 """empty message
 
-Revision ID: 47d61ae2287e
+Revision ID: 3bdd1f023d6d
 Revises: 
-Create Date: 2014-12-14 15:14:36.132836
+Create Date: 2014-12-14 16:28:47.161504
 
 """
 
 # revision identifiers, used by Alembic.
-revision = '47d61ae2287e'
+revision = '3bdd1f023d6d'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -27,12 +27,12 @@ def upgrade():
     sa.Column('name', sa.Unicode(length=70), nullable=False),
     sa.Column('parent_user_id', sa.Unicode(length=30), nullable=True),
     sa.Column('parent_name', sa.Unicode(length=70), nullable=True),
-    sa.CheckConstraint(u"left(name, 1) = '/'"),
-    sa.CheckConstraint(u"length(regexp_replace(name, '[^/]+', '', 'g')) - 1= length(regexp_replace(parent_name, '[^/]+', '', 'g'))"),
-    sa.CheckConstraint(u"right(name, 1) = '/'"),
-    sa.CheckConstraint(u'(parent_name IS NULL AND parent_user_id IS NULL) OR (parent_name IS NOT NULL AND parent_user_id IS NOT NULL)'),
-    sa.CheckConstraint(u'position(parent_name in name) != 0'),
-    sa.CheckConstraint(u'user_id = parent_user_id'),
+    sa.CheckConstraint(u"left(name, 1) = '/'", name=u'directories_startwith_slash'),
+    sa.CheckConstraint(u"length(regexp_replace(name, '[^/]+', '', 'g')) - 1= length(regexp_replace(parent_name, '[^/]+', '', 'g'))", name=u'directories_slash_count'),
+    sa.CheckConstraint(u"right(name, 1) = '/'", name=u'directories_endwith_slash'),
+    sa.CheckConstraint(u'(parent_name IS NULL AND parent_user_id IS NULL) OR (parent_name IS NOT NULL AND parent_user_id IS NOT NULL)', name=u'directories_null_user_id_match'),
+    sa.CheckConstraint(u'position(parent_name in name) != 0', name=u'directories_parent_name_prefix'),
+    sa.CheckConstraint(u'user_id = parent_user_id', name=u'directories_match_user_id'),
     sa.ForeignKeyConstraint(['parent_user_id', 'parent_name'], [u'directories.user_id', u'directories.name'], ),
     sa.ForeignKeyConstraint(['user_id'], [u'users.id'], ),
     sa.PrimaryKeyConstraint('user_id', 'name')
