@@ -15,10 +15,10 @@ fileConfig(config.config_file_name)
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from os.path import dirname
+from os.path import dirname, abspath
 import sys
-sys.path.append(dirname(dirname(__file__)))
-from schema import metadata
+sys.path.append(dirname(dirname(dirname(abspath(__file__)))))
+from pgcontents.schema import metadata
 target_metadata = metadata
 
 # other values from the config, defined by the needs of env.py,
