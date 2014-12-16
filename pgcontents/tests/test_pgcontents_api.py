@@ -39,6 +39,9 @@ class PGContentsAPITest(APITest):
         'pgcontents.pgmanager.PostgresContentsManager'
     config.PostgresContentsManager.user_id = 'test'
 
+    # Don't support hidden directories.
+    hidden_dirs = []
+
     @property
     def contents_manager(self):
         return self.notebook.contents_manager

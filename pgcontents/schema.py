@@ -17,6 +17,7 @@ from __future__ import unicode_literals
 from itertools import izip
 from textwrap import dedent
 
+from psycopg2.errorcodes import FOREIGN_KEY_VIOLATION
 from sqlalchemy import (
     CheckConstraint,
     Column,
@@ -34,9 +35,11 @@ from sqlalchemy import (
     null,
     select,
 )
+from sqlalchemy.exc import IntegrityError
 
 from db_utils import ignore_unique_violation
 from .error import (
+    DirectoryNotEmpty,
     FileExists,
     NoSuchDirectory,
     NoSuchFile,
@@ -332,12 +335,14 @@ def delete_file(db, user_id, api_path):
             _notebook_where(user_id, api_path)
         )
     )
-    if not result.rowcount:
+
+    rowcount = result.rowcount
+    if not rowcount:
         raise NoSuchFile(api_path)
 
     # TODO: This is misleading because we allow multiple files with the same
     # user_id/name as checkpoints.  Consider de-duping this in some way?
-    return result.rowcount
+    return rowcount
 
 
 def delete_directory(db, user_id, api_path):
@@ -346,7 +351,26 @@ def delete_directory(db, user_id, api_path):
 
     TODO: Consider making this a soft delete.
     """
-    raise NotImplementedError()
+    db_dirname = from_api_dirname(api_path)
+    try:
+        result = db.execute(
+            directories.delete().where(
+                and_(
+                    directories.c.user_id == user_id,
+                    directories.c.name == db_dirname,
+                )
+            )
+        )
+    except IntegrityError as error:
+        if error.orig.pgcode != FOREIGN_KEY_VIOLATION:
+            raise
+        raise DirectoryNotEmpty(api_path)
+
+    rowcount = result.rowcount
+    if not rowcount:
+        raise NoSuchDirectory(api_path)
+
+    return rowcount
 
 
 def notebook_exists(db, user_id, path):
@@ -451,8 +475,8 @@ def _directory_contents(db, table, fields, user_id, db_dirname):
             fields,
         ).where(
             and_(
-                table.c.parent_name == db_dirname,
                 table.c.user_id == user_id,
+                table.c.parent_name == db_dirname,
             )
         )
     )
@@ -472,9 +496,10 @@ def files_in_directory(db, user_id, db_dirname):
         ).order_by(
             notebooks.c.user_id,
             notebooks.c.parent_name,
+            notebooks.c.name,
             notebooks.c.created_at,
         ).distinct(
-            notebooks.c.user_id, notebooks.c.parent_name,
+            notebooks.c.user_id, notebooks.c.parent_name, notebooks.c.name,
         )
     )
     return [to_dict(fields, row) for row in rows]

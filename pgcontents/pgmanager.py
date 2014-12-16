@@ -44,6 +44,7 @@ from sqlalchemy.engine.base import Engine
 from tornado import web
 
 from .error import (
+    DirectoryNotEmpty,
     FileExists,
     NoSuchDirectory,
     NoSuchFile,
@@ -126,7 +127,7 @@ def from_b64(path, bcontent, format):
         'text': 'text/plain',
         'base64': 'application/octet-stream',
     }
-    mimetype = mimetypes.guess_type(path) or default_mimes[real_format]
+    mimetype = mimetypes.guess_type(path)[0] or default_mimes[real_format]
 
     return content, real_format, mimetype
 
@@ -243,7 +244,7 @@ class PostgresContentsManager(ContentsManager):
             try:
                 record = get_notebook(db, self.user_id, path, content)
             except NoSuchFile:
-                self.no_such_file(path)
+                self.no_such_entity(path)
 
         return self._notebook_model_from_db(record, content)
 
@@ -278,7 +279,7 @@ class PostgresContentsManager(ContentsManager):
                     # return a 400 instead of 404. Consider just 404ing.
                     self.do_400("Wrong type: %s" % path)
                 else:
-                    self.no_such_directory(path)
+                    self.no_such_entity(path)
 
         return self._directory_model_from_db(record, content)
 
@@ -296,10 +297,7 @@ class PostgresContentsManager(ContentsManager):
             model['format'] = 'json'
             model['content'] = list(
                 chain(
-                    (
-                        self._notebook_model_from_db(nb, False)
-                        for nb in record['files']
-                    ),
+                    self._convert_file_records(record['files']),
                     (
                         self._directory_model_from_db(subdir, False)
                         for subdir in record['subdirs']
@@ -307,6 +305,20 @@ class PostgresContentsManager(ContentsManager):
                 )
             )
         return model
+
+    def _convert_file_records(self, file_records):
+        """
+        Apply _notebook_model_from_db or _file_model_from_db to each entry
+        in file_records, depending on the result of `guess_type`.
+        """
+        for record in file_records:
+            type_ = self.guess_type(record['name'])
+            if type_ == 'notebook':
+                yield self._notebook_model_from_db(record, False)
+            elif type_ == 'file':
+                yield self._file_model_from_db(record, False, None)
+            else:
+                self.do_500("Unknown file type %s" % type_)
 
     def _get_file(self, path, content, format):
         with self.engine.begin() as db:
@@ -318,7 +330,7 @@ class PostgresContentsManager(ContentsManager):
                     # return a 400 instead of 404. Consider just 404ing.
                     self.do_400(u"Wrong type: %s" % path)
                 else:
-                    self.no_such_file(path)
+                    self.no_such_entity(path)
         return self._file_model_from_db(record, content, format)
 
     def _file_model_from_db(self, record, content, format):
@@ -392,15 +404,18 @@ class PostgresContentsManager(ContentsManager):
         Save a non-notebook file.
         """
         fmt = model.get('format', None)
-        if fmt not in {'text', 'base64'}:
+        allowed_formats = {'text', 'base64'}
+        if fmt not in allowed_formats:
             self.do_400(
-                "Must specify format of file contents as 'text' or 'base64'"
+                "Expected file contents in {allowed}, got {fmt}".format(
+                    allowed=allowed_formats,
+                    fmt=fmt,
+                )
             )
-        # TODO: Abstract this.
         if fmt == 'text':
             bcontent = b64encode(model['content'].encode('utf8'))
         else:
-            bcontent = model['content']
+            bcontent = model['content'].encode('ascii')
 
         save_notebook(db, self.user_id, path, bcontent)
         return None
@@ -445,17 +460,22 @@ class PostgresContentsManager(ContentsManager):
         elif self.dir_exists(path):
             self._delete_directory(path)
         else:
-            self.no_such_file(path)
+            self.no_such_entity(path)
 
     def _delete_file(self, path):
         with self.engine.begin() as db:
             deleted_count = delete_file(db, self.user_id, path)
             if not deleted_count:
-                self.no_such_file(path)
+                self.no_such_entity(path)
 
     def _delete_directory(self, path):
         with self.engine.begin() as db:
-            delete_directory(db, self.user_id, path)
+            try:
+                deleted_count = delete_directory(db, self.user_id, path)
+            except DirectoryNotEmpty:
+                self.not_empty(path)
+            if not deleted_count:
+                self.no_such_entity(path)
 
     def create_checkpoint(self, path):
         raise NotImplementedError()
@@ -467,14 +487,14 @@ class PostgresContentsManager(ContentsManager):
         raise NotImplementedError()
     # End ContentsManager API.
 
-    def no_such_file(self, path):
+    def no_such_entity(self, path):
         self.do_404(
-            u"No such file: [{path}]".format(path=path)
+            u"No such entity: [{path}]".format(path=path)
         )
 
-    def no_such_directory(self, path):
-        self.do_404(
-            u"No such directory: [{path}]".format(path=path)
+    def not_empty(self, path):
+        self.do_400(
+            u"Directory not empty: [{path}]".format(path=path)
         )
 
     def already_exists(self, path):

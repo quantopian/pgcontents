@@ -13,3 +13,7 @@ class NoSuchFile(Exception):
 
 class FileExists(Exception):
     pass
+
+
+class DirectoryNotEmpty(Exception):
+    pass
