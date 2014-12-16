@@ -19,7 +19,6 @@ PostgreSQL implementation of IPython ContentsManager API.
 from base64 import (
     b64decode,
     b64encode,
-    encodestring,
 )
 from datetime import datetime
 from getpass import getuser
@@ -45,6 +44,7 @@ from sqlalchemy.engine.base import Engine
 from tornado import web
 
 from .error import (
+    FileExists,
     NoSuchDirectory,
     NoSuchFile,
 )
@@ -74,18 +74,18 @@ def writes_base64(nb, version=NBFORMAT_VERSION):
     """
     Write a notebook as base64.
     """
-    return b64encode(writes(nb, version=version))
+    return b64encode(writes(nb, version=version).encode('utf-8'))
 
 
 def reads_base64(nb, as_version=NBFORMAT_VERSION):
     """
     Read a notebook from base64.
     """
-    return reads(b64decode(nb), as_version=as_version)
+    return reads(b64decode(nb).decode('utf-8'), as_version=as_version)
 
 
 def _decode_text_from_base64(path, bcontent):
-    content = b64decode(content)
+    content = b64decode(bcontent)
     try:
         return (content.decode('utf-8'), 'text')
     except UnicodeError:
@@ -215,7 +215,6 @@ class PostgresContentsManager(ContentsManager):
     def get(self, path, content=True, type=None, format=None):
         if type is None:
             type = self.guess_type(path)
-
         if type == "notebook":
             return self._get_notebook(path, content, format)
         elif type == "directory":
@@ -242,22 +241,22 @@ class PostgresContentsManager(ContentsManager):
         """
         with self.engine.begin() as db:
             try:
-                nb = get_notebook(db, self.user_id, path, content)
+                record = get_notebook(db, self.user_id, path, content)
             except NoSuchFile:
                 self.no_such_file(path)
 
-        return self._notebook_model_from_db(nb, content)
+        return self._notebook_model_from_db(record, content)
 
-    def _notebook_model_from_db(self, nb, content):
+    def _notebook_model_from_db(self, record, content):
         """
         Build a notebook model from database record.
         """
-        path = to_api_path(nb['parent_name'] + nb['name'])
+        path = to_api_path(record['parent_name'] + record['name'])
         model = self._base_model(path)
         model['type'] = 'notebook'
-        model['last_modified'] = model['created'] = nb['created_at']
+        model['last_modified'] = model['created'] = record['created_at']
         if content:
-            content = reads_base64(nb['content'])
+            content = reads_base64(record['content'])
             self.mark_trusted_cells(content, path)
             model['content'] = content
             model['format'] = 'json'
@@ -270,19 +269,24 @@ class PostgresContentsManager(ContentsManager):
         """
         with self.engine.begin() as db:
             try:
-                db_dir = get_directory(
+                record = get_directory(
                     db, self.user_id, path, content
                 )
             except NoSuchDirectory:
-                self.no_such_directory(path)
+                if self.file_exists(path):
+                    # TODO: It's awkward/expensive to have to check this to
+                    # return a 400 instead of 404. Consider just 404ing.
+                    self.do_400("Wrong type: %s" % path)
+                else:
+                    self.no_such_directory(path)
 
-        return self._directory_model_from_db(db_dir, content)
+        return self._directory_model_from_db(record, content)
 
-    def _directory_model_from_db(self, db_dir, content):
+    def _directory_model_from_db(self, record, content):
         """
-        Build a directory model from a list of database records.
+        Build a directory model from database directory record.
         """
-        model = self._base_model(to_api_path(db_dir['name']))
+        model = self._base_model(to_api_path(record['name']))
         model['type'] = 'directory'
         # TODO: Track directory modifications and fill in a real value for
         # this.
@@ -294,26 +298,40 @@ class PostgresContentsManager(ContentsManager):
                 chain(
                     (
                         self._notebook_model_from_db(nb, False)
-                        for nb in db_dir['files']
+                        for nb in record['files']
                     ),
                     (
                         self._directory_model_from_db(subdir, False)
-                        for subdir in db_dir['subdirs']
+                        for subdir in record['subdirs']
                     ),
                 )
             )
         return model
 
     def _get_file(self, path, content, format):
-        model = self._base_model(path)
-        model['type'] = 'file'
         with self.engine.begin() as db:
             try:
-                nb = get_notebook(db, self.user_id, path, content)
+                record = get_notebook(db, self.user_id, path, content)
             except NoSuchFile:
-                self.no_such_file(path)
+                if self.dir_exists(path):
+                    # TODO: It's awkward/expensive to have to check this to
+                    # return a 400 instead of 404. Consider just 404ing.
+                    self.do_400(u"Wrong type: %s" % path)
+                else:
+                    self.no_such_file(path)
+        return self._file_model_from_db(record, content, format)
+
+    def _file_model_from_db(self, record, content, format):
+        """
+        Build a file model from database record.
+        """
+        # TODO: Most of this is shared with _notebook_model_from_db.
+        path = to_api_path(record['parent_name'] + record['name'])
+        model = self._base_model(path)
+        model['type'] = 'file'
+        model['last_modified'] = model['created'] = record['created_at']
         if content:
-            bcontent = nb['content']
+            bcontent = record['content']
             model['content'], model['format'], model['mimetype'] = from_b64(
                 path,
                 bcontent,
@@ -378,7 +396,13 @@ class PostgresContentsManager(ContentsManager):
             self.do_400(
                 "Must specify format of file contents as 'text' or 'base64'"
             )
-        save_notebook(db, self.user_id, path, b64encode(model['content']))
+        # TODO: Abstract this.
+        if fmt == 'text':
+            bcontent = b64encode(model['content'].encode('utf8'))
+        else:
+            bcontent = model['content']
+
+        save_notebook(db, self.user_id, path, bcontent)
         return None
 
     def _save_directory(self, db, path):
@@ -407,7 +431,10 @@ class PostgresContentsManager(ContentsManager):
         Rename a file.
         """
         with self.engine.begin() as db:
-            rename_file(db, self.user_id, old_path, path)
+            try:
+                rename_file(db, self.user_id, old_path, path)
+            except FileExists:
+                self.already_exists(path)
 
     def delete(self, path):
         """
@@ -442,19 +469,25 @@ class PostgresContentsManager(ContentsManager):
 
     def no_such_file(self, path):
         self.do_404(
-            "No such file: [{path}]".format(path=path)
+            u"No such file: [{path}]".format(path=path)
         )
 
     def no_such_directory(self, path):
         self.do_404(
-            "No such directory: [{path}]".format(path=path)
+            u"No such directory: [{path}]".format(path=path)
         )
+
+    def already_exists(self, path):
+        self.do_409(u"File already exists: [{path}]".format(path=path))
+
+    def do_400(self, msg):
+        raise web.HTTPError(400, msg)
 
     def do_404(self, msg):
         raise web.HTTPError(404, msg)
 
-    def do_400(self, msg):
-        raise web.HTTPError(400, msg)
+    def do_409(self, msg):
+        raise web.HTTPError(409, msg)
 
     def do_500(self, msg):
         raise web.HTTPError(500, msg)

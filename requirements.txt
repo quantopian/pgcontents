@@ -20,3 +20,4 @@ tornado==4.0.2
 wmctrl==0.1
 wsgiref==0.1.2
 flake8==2.2.5
+requests==2.5.0

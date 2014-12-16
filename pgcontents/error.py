@@ -9,3 +9,7 @@ class NoSuchDirectory(Exception):
 
 class NoSuchFile(Exception):
     pass
+
+
+class FileExists(Exception):
+    pass

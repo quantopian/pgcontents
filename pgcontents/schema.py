@@ -37,6 +37,7 @@ from sqlalchemy import (
 
 from db_utils import ignore_unique_violation
 from .error import (
+    FileExists,
     NoSuchDirectory,
     NoSuchFile,
 )
@@ -209,6 +210,14 @@ def ensure_directory(db, user_id, api_path):
     """
     Ensure that the given user has the given directory.
     """
+    with ignore_unique_violation():
+        create_directory(db, user_id, api_path)
+
+
+def create_directory(db, user_id, api_path):
+    """
+    Create a directory.
+    """
     name = from_api_dirname(api_path)
     if name == '/':
         parent_name = null()
@@ -218,15 +227,14 @@ def ensure_directory(db, user_id, api_path):
         parent_name = name[:name.rindex('/', 0, -1) + 1]
         parent_user_id = user_id
 
-    with ignore_unique_violation():
-        db.execute(
-            directories.insert().values(
-                name=name,
-                user_id=user_id,
-                parent_name=parent_name,
-                parent_user_id=parent_user_id,
-            )
+    db.execute(
+        directories.insert().values(
+            name=name,
+            user_id=user_id,
+            parent_name=parent_name,
+            parent_user_id=parent_user_id,
         )
+    )
 
 
 def to_dict(fields, row):
@@ -344,29 +352,41 @@ def delete_directory(db, user_id, api_path):
 def notebook_exists(db, user_id, path):
     """
     Check if a notebook exists.
+
+    TODO: Rename this to file_exists.
     """
-    return get_notebook(db, user_id, path, include_content=False) is None
+    try:
+        get_notebook(db, user_id, path, include_content=False)
+        return True
+    except NoSuchFile:
+        return False
 
 
-def rename_file(db, user_id, old_path, new_path):
+def rename_file(db, user_id, old_api_path, new_api_path):
     """
     Rename a file. The file must stay in the same directory.
 
     TODO: Consider allowing renames to existing directories.
     TODO: Don't do anything if paths are the same.
     """
-    old_dir, old_name = split_api_filepath(old_path)
-    new_dir, new_name = split_api_filepath(new_path)
-    if not old_dir == new_dir:
+    old_dir, old_name = split_api_filepath(old_api_path)
+    new_dir, new_name = split_api_filepath(new_api_path)
+    if old_dir != new_dir:
         raise ValueError(
             dedent(
                 """
                 Can't rename file to new directory.
-                Old Path: {old_path}
-                New Path: {new_path}
-                """.format(old_path=old_path, new_path=new_path)
+                Old Path: {old_api_path}
+                New Path: {new_api_path}
+                """.format(
+                    old_api_path=old_api_path,
+                    new_api_path=new_api_path
+                )
             )
         )
+
+    if notebook_exists(db, user_id, new_api_path):
+        raise FileExists(new_api_path)
 
     db.execute(
         notebooks.update().where(
