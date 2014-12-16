@@ -476,26 +476,6 @@ def _dir_exists(db, user_id, db_dirname):
     ).scalar() != 0
 
 
-def _directory_contents(db, table, fields, user_id, db_dirname):
-    """
-    Return names of entries in the given directory.
-
-    Parameterized by table/fields because this has the same query structure for
-    files and directories.
-    """
-    rows = db.execute(
-        select(
-            fields,
-        ).where(
-            and_(
-                table.c.user_id == user_id,
-                table.c.parent_name == db_dirname,
-            )
-        )
-    )
-    return [to_dict(fields, row) for row in rows]
-
-
 def files_in_directory(db, user_id, db_dirname):
     """
     Return files in a directory.
