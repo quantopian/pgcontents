@@ -27,8 +27,8 @@ from ..pgmanager import (
 from ..schema import (
     create_directory,
     dir_exists,
-    notebook_exists,
-    save_notebook,
+    file_exists,
+    save_file
 )
 
 
@@ -61,7 +61,7 @@ class PGContentsAPITest(APITest):
 
     def make_txt(self, api_path, txt):
         with self.engine.begin() as db:
-            save_notebook(
+            save_file(
                 db,
                 self.user_id,
                 api_path,
@@ -70,11 +70,11 @@ class PGContentsAPITest(APITest):
 
     def make_blob(self, api_path, blob):
         with self.engine.begin() as db:
-            save_notebook(db, self.user_id, api_path, b64encode(blob))
+            save_file(db, self.user_id, api_path, b64encode(blob))
 
     def make_nb(self, api_path, nb):
         with self.engine.begin() as db:
-            save_notebook(db, self.user_id, api_path, writes_base64(nb))
+            save_file(db, self.user_id, api_path, writes_base64(nb))
 
     # TODO: Use these rather than relying on `purge`.
     def delete_dir(self, api_path):
@@ -85,7 +85,7 @@ class PGContentsAPITest(APITest):
 
     def isfile(self, api_path):
         with self.engine.begin() as db:
-            return notebook_exists(db, self.user_id, api_path)
+            return file_exists(db, self.user_id, api_path)
 
     def isdir(self, api_path):
         with self.engine.begin() as db:

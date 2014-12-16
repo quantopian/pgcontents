@@ -131,8 +131,8 @@ directories = Table(
 )
 
 
-notebooks = Table(
-    'notebooks',
+files = Table(
+    'files',
     metadata,
     Column('id', Integer(), nullable=False, primary_key=True),
     Column('name', Unicode(40), nullable=False),
@@ -209,6 +209,21 @@ def ensure_db_user(db, user_id):
         )
 
 
+def purge_user(db, user_id):
+    """
+    Delete a user and all of their resources.
+    """
+    db.execute(files.delete().where(
+        files.c.user_id == user_id
+    ))
+    db.execute(directories.delete().where(
+        directories.c.user_id == user_id
+    ))
+    db.execute(users.delete().where(
+        users.c.id == user_id
+    ))
+
+
 def ensure_directory(db, user_id, api_path):
     """
     Ensure that the given user has the given directory.
@@ -253,15 +268,15 @@ def to_dict(fields, row):
     }
 
 
-def _notebook_where(user_id, api_path):
+def _file_where(user_id, api_path):
     """
     Return a WHERE clause matching the given API path and user_id.
     """
     directory, name = split_api_filepath(api_path)
     return and_(
-        notebooks.c.name == name,
-        notebooks.c.user_id == user_id,
-        notebooks.c.parent_name == directory,
+        files.c.name == name,
+        files.c.user_id == user_id,
+        files.c.parent_name == directory,
     )
 
 
@@ -278,41 +293,41 @@ def _is_in_directory(table, user_id, db_dirname):
     )
 
 
-def _notebook_default_fields():
+def _file_default_fields():
     """
-    Default fields returned by a notebook query.
+    Default fields returned by a file query.
     """
     return [
-        notebooks.c.name,
-        notebooks.c.created_at,
-        notebooks.c.parent_name,
+        files.c.name,
+        files.c.created_at,
+        files.c.parent_name,
     ]
 
 
 def _directory_default_fields():
     """
-    Default fields returned by a notebook query.
+    Default fields returned by a directory query.
     """
     return [
         directories.c.name,
     ]
 
 
-def get_notebook(db, user_id, api_path, include_content):
+def get_file(db, user_id, api_path, include_content):
     """
-    Get notebook data for the given user_id and path.
+    Get file data for the given user_id and path.
 
     Include content only if include_content=True.
     """
-    query_fields = _notebook_default_fields()
+    query_fields = _file_default_fields()
     if include_content:
-        query_fields.append(notebooks.c.content)
+        query_fields.append(files.c.content)
 
     result = db.execute(
         select(query_fields).where(
-            _notebook_where(user_id, api_path),
+            _file_where(user_id, api_path),
         ).order_by(
-            desc(notebooks.c.created_at)
+            desc(files.c.created_at)
         ).limit(
             1
         )
@@ -331,8 +346,8 @@ def delete_file(db, user_id, api_path):
     """
     directory, name = split_api_filepath(api_path)
     result = db.execute(
-        notebooks.delete().where(
-            _notebook_where(user_id, api_path)
+        files.delete().where(
+            _file_where(user_id, api_path)
         )
     )
 
@@ -373,14 +388,12 @@ def delete_directory(db, user_id, api_path):
     return rowcount
 
 
-def notebook_exists(db, user_id, path):
+def file_exists(db, user_id, path):
     """
-    Check if a notebook exists.
-
-    TODO: Rename this to file_exists.
+    Check if a file exists.
     """
     try:
-        get_notebook(db, user_id, path, include_content=False)
+        get_file(db, user_id, path, include_content=False)
         return True
     except NoSuchFile:
         return False
@@ -409,26 +422,26 @@ def rename_file(db, user_id, old_api_path, new_api_path):
             )
         )
 
-    if notebook_exists(db, user_id, new_api_path):
+    if file_exists(db, user_id, new_api_path):
         raise FileExists(new_api_path)
 
     db.execute(
-        notebooks.update().where(
-            (notebooks.c.user_id == user_id)
-            & (notebooks.c.parent_name == new_dir)
+        files.update().where(
+            (files.c.user_id == user_id)
+            & (files.c.parent_name == new_dir)
         ).values(
             name=new_name,
         )
     )
 
 
-def save_notebook(db, user_id, path, content):
+def save_file(db, user_id, path, content):
     """
-    Save a notebook.
+    Save a file.
     """
     directory, name = split_api_filepath(path)
     res = db.execute(
-        notebooks.insert().values(
+        files.insert().values(
             name=name,
             user_id=user_id,
             parent_name=directory,
@@ -468,7 +481,7 @@ def _directory_contents(db, table, fields, user_id, db_dirname):
     Return names of entries in the given directory.
 
     Parameterized by table/fields because this has the same query structure for
-    notebooks and directories.
+    files and directories.
     """
     rows = db.execute(
         select(
@@ -487,19 +500,19 @@ def files_in_directory(db, user_id, db_dirname):
     """
     Return files in a directory.
     """
-    fields = _notebook_default_fields()
+    fields = _file_default_fields()
     rows = db.execute(
         select(
             fields,
         ).where(
-            _is_in_directory(notebooks, user_id, db_dirname),
+            _is_in_directory(files, user_id, db_dirname),
         ).order_by(
-            notebooks.c.user_id,
-            notebooks.c.parent_name,
-            notebooks.c.name,
-            notebooks.c.created_at,
+            files.c.user_id,
+            files.c.parent_name,
+            files.c.name,
+            files.c.created_at,
         ).distinct(
-            notebooks.c.user_id, notebooks.c.parent_name, notebooks.c.name,
+            files.c.user_id, files.c.parent_name, files.c.name,
         )
     )
     return [to_dict(fields, row) for row in rows]

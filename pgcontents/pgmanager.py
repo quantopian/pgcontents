@@ -50,19 +50,17 @@ from .error import (
     NoSuchFile,
 )
 from .schema import (
-    delete_directory,
     delete_file,
+    delete_directory,
     dir_exists,
-    directories,
     ensure_db_user,
     ensure_directory,
-    get_notebook,
     get_directory,
-    notebooks,
+    get_file,
+    purge_user,
     rename_file,
-    save_notebook,
+    save_file,
     to_api_path,
-    users,
 )
 
 # We don't currently track created/modified dates for directories, so this
@@ -172,15 +170,7 @@ class PostgresContentsManager(ContentsManager):
         Clear all matching our user_id.
         """
         with self.engine.begin() as db:
-            db.execute(notebooks.delete().where(
-                notebooks.c.user_id == self.user_id
-            ))
-            db.execute(directories.delete().where(
-                directories.c.user_id == self.user_id
-            ))
-            db.execute(users.delete().where(
-                users.c.id == self.user_id
-            ))
+            purge_user(db, self.user_id)
 
     # Begin ContentsManager API.
     def dir_exists(self, path):
@@ -193,7 +183,7 @@ class PostgresContentsManager(ContentsManager):
     def file_exists(self, path):
         with self.engine.begin() as db:
             try:
-                get_notebook(db, self.user_id, path, include_content=False)
+                get_file(db, self.user_id, path, include_content=False)
                 return True
             except NoSuchFile:
                 return False
@@ -242,7 +232,7 @@ class PostgresContentsManager(ContentsManager):
         """
         with self.engine.begin() as db:
             try:
-                record = get_notebook(db, self.user_id, path, content)
+                record = get_file(db, self.user_id, path, content)
             except NoSuchFile:
                 self.no_such_entity(path)
 
@@ -323,7 +313,7 @@ class PostgresContentsManager(ContentsManager):
     def _get_file(self, path, content, format):
         with self.engine.begin() as db:
             try:
-                record = get_notebook(db, self.user_id, path, content)
+                record = get_file(db, self.user_id, path, content)
             except NoSuchFile:
                 if self.dir_exists(path):
                     # TODO: It's awkward/expensive to have to check this to
@@ -394,7 +384,7 @@ class PostgresContentsManager(ContentsManager):
         """
         nb_contents = from_dict(model['content'])
         self.check_and_sign(nb_contents, path)
-        save_notebook(db, self.user_id, path, writes_base64(nb_contents))
+        save_file(db, self.user_id, path, writes_base64(nb_contents))
         # It's awkward that this writes to the model instead of returning.
         self.validate_notebook_model(model)
         return model.get('message')
@@ -417,7 +407,7 @@ class PostgresContentsManager(ContentsManager):
         else:
             bcontent = model['content'].encode('ascii')
 
-        save_notebook(db, self.user_id, path, bcontent)
+        save_file(db, self.user_id, path, bcontent)
         return None
 
     def _save_directory(self, db, path):
@@ -511,3 +501,4 @@ class PostgresContentsManager(ContentsManager):
 
     def do_500(self, msg):
         raise web.HTTPError(500, msg)
+
