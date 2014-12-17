@@ -42,6 +42,7 @@ from db_utils import ignore_unique_violation
 from .error import (
     DirectoryNotEmpty,
     FileExists,
+    FileTooLarge,
     NoSuchDirectory,
     NoSuchFile,
 )
@@ -471,10 +472,21 @@ def rename_file(db, user_id, old_api_path, new_api_path):
     )
 
 
-def save_file(db, user_id, path, content):
+UNLIMITED = 0
+
+def check_content(content, max_size_bytes):
+    """
+    Check that the content to be saved isn't too large to store.
+    """
+    if max_size_bytes != UNLIMITED and len(content) > max_size_bytes:
+        raise FileTooLarge()
+
+
+def save_file(db, user_id, path, content, max_size_bytes):
     """
     Save a file.
     """
+    check_content(content, max_size_bytes)
     directory, name = split_api_filepath(path)
     res = db.execute(
         files.insert().values(

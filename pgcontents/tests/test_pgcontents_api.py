@@ -30,7 +30,8 @@ from ..schema import (
     create_directory,
     dir_exists,
     file_exists,
-    save_file
+    save_file,
+    UNLIMITED,
 )
 
 
@@ -67,15 +68,16 @@ class PGContentsAPITest(APITest):
                 self.user_id,
                 api_path,
                 b64encode(txt.encode('utf-8')),
+                UNLIMITED,
             )
 
     def make_blob(self, api_path, blob):
         with self.engine.begin() as db:
-            save_file(db, self.user_id, api_path, b64encode(blob))
+            save_file(db, self.user_id, api_path, b64encode(blob), UNLIMITED)
 
     def make_nb(self, api_path, nb):
         with self.engine.begin() as db:
-            save_file(db, self.user_id, api_path, writes_base64(nb))
+            save_file(db, self.user_id, api_path, writes_base64(nb), UNLIMITED)
 
     # TODO: Use these rather than relying on `purge`.
     def delete_dir(self, api_path):

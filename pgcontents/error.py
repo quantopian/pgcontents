@@ -17,3 +17,7 @@ class FileExists(Exception):
 
 class DirectoryNotEmpty(Exception):
     pass
+
+
+class FileTooLarge(Exception):
+    pass

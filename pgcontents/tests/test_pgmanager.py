@@ -15,7 +15,12 @@
 """
 Run IPython's TestContentsManager using PostgresContentsManager.
 """
+from __future__ import unicode_literals
+
+from base64 import b64encode
+
 from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
+from tornado.web import HTTPError
 
 from ..pgmanager import PostgresContentsManager
 
@@ -35,6 +40,38 @@ class PostgresContentsManagerTestCase(TestContentsManager):
             model={'type': 'directory'},
             path=api_path,
         )
+
+    def test_max_file_size(self):
+        cm = self.contents_manager
+        max_size = 68
+        cm.max_file_size_bytes = max_size
+
+        good = 'a' * 51
+        self.assertEqual(len(b64encode(good)), max_size)
+        cm.save(
+            model={
+                'content': good,
+                'format': 'text',
+                'type': 'file',
+            },
+            path='good.txt',
+        )
+        result = cm.get('good.txt')
+        self.assertEqual(result['content'], good)
+
+        bad = 'a' * 52
+        self.assertGreater(bad, max_size)
+        with self.assertRaises(HTTPError) as ctx:
+            cm.save(
+                model={
+                    'content': bad,
+                    'format': 'text',
+                    'type': 'file',
+                },
+                path='bad.txt',
+            )
+        err = ctx.exception
+        self.assertEqual(err.status_code, 413)
 
 
 # This needs to be removed or else we'll run the main IPython tests as well.

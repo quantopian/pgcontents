@@ -33,6 +33,7 @@ from IPython.nbformat import (
 )
 from IPython.utils.traitlets import (
     Instance,
+    Integer,
     Unicode,
 )
 from IPython.html.services.contents.manager import ContentsManager
@@ -47,6 +48,7 @@ from tornado import web
 from .error import (
     DirectoryNotEmpty,
     FileExists,
+    FileTooLarge,
     NoSuchDirectory,
     NoSuchFile,
 )
@@ -66,6 +68,7 @@ from .schema import (
     restore_checkpoint,
     save_file,
     to_api_path,
+    UNLIMITED,
 )
 
 # We don't currently track created/modified dates for directories, so this
@@ -151,7 +154,13 @@ class PostgresContentsManager(ContentsManager):
     user_id = Unicode(
         default_value=getuser(),
         config=True,
-        help="Username for the server we're managing.",
+        help="Name for the user whose contents we're managing.",
+    )
+
+    max_file_size_bytes = Integer(
+        default_value=UNLIMITED,
+        config=True,
+        help="Maximum size in bytes of a file that will be saved.",
     )
 
     engine = Instance(Engine)
@@ -368,6 +377,8 @@ class PostgresContentsManager(ContentsManager):
                     validation_message = self._save_directory(db, path)
         except web.HTTPError:
             raise
+        except FileTooLarge:
+            self.file_too_large(path)
         except Exception as e:
             self.log.error(u'Error while saving file: %s %s',
                            path, e, exc_info=True)
@@ -389,7 +400,13 @@ class PostgresContentsManager(ContentsManager):
         """
         nb_contents = from_dict(model['content'])
         self.check_and_sign(nb_contents, path)
-        save_file(db, self.user_id, path, writes_base64(nb_contents))
+        save_file(
+            db,
+            self.user_id,
+            path,
+            writes_base64(nb_contents),
+            self.max_file_size_bytes,
+        )
         # It's awkward that this writes to the model instead of returning.
         self.validate_notebook_model(model)
         return model.get('message')
@@ -412,7 +429,13 @@ class PostgresContentsManager(ContentsManager):
         else:
             bcontent = model['content'].encode('ascii')
 
-        save_file(db, self.user_id, path, bcontent)
+        save_file(
+            db,
+            self.user_id,
+            path,
+            bcontent,
+            self.max_file_size_bytes,
+        )
         return None
 
     def _save_directory(self, db, path):
@@ -474,8 +497,7 @@ class PostgresContentsManager(ContentsManager):
 
     def create_checkpoint(self, path):
         """
-        We create 'checkpoints' automatically on every save, so just return the
-        most recent checkpoint id.
+        Create a checkpoint.
         """
         with self.engine.begin() as db:
             try:
@@ -494,6 +516,9 @@ class PostgresContentsManager(ContentsManager):
         }
 
     def list_checkpoints(self, path):
+        """
+        List checkpoints.
+        """
         with self.engine.begin() as db:
             try:
                 records = list_checkpoints(db, self.user_id, path)
@@ -503,6 +528,9 @@ class PostgresContentsManager(ContentsManager):
         return [self._checkpoint_from_record(record) for record in records]
 
     def restore_checkpoint(self, checkpoint_id, path):
+        """
+        Restore a checkpoint.
+        """
         with self.engine.begin() as db:
             try:
                 restore_checkpoint(db, self.user_id, path, checkpoint_id)
@@ -523,6 +551,7 @@ class PostgresContentsManager(ContentsManager):
                         path=path, checkpoint_id=checkpoint_id,
                     )
                 )
+    # End ContentsManager API.
 
     def no_such_entity(self, path):
         self.do_404(
@@ -533,6 +562,9 @@ class PostgresContentsManager(ContentsManager):
         self.do_400(
             u"Directory not empty: [{path}]".format(path=path)
         )
+
+    def file_too_large(self, path):
+        self.do_413(u"File is too large to save: [{path}]".format(path=path))
 
     def already_exists(self, path):
         self.do_409(u"File already exists: [{path}]".format(path=path))
@@ -545,6 +577,9 @@ class PostgresContentsManager(ContentsManager):
 
     def do_409(self, msg):
         raise web.HTTPError(409, msg)
+
+    def do_413(self, msg):
+        raise web.HTTPError(413, msg)
 
     def do_500(self, msg):
         raise web.HTTPError(500, msg)
