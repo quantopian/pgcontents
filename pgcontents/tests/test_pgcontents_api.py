@@ -22,16 +22,16 @@ from base64 import (
 from IPython.config import Config
 from IPython.html.services.contents.tests.test_contents_api import APITest
 
+from ..constants import UNLIMITED
 from ..pgmanager import (
     PostgresContentsManager,
     writes_base64,
 )
-from ..schema import (
+from ..query import (
     create_directory,
     dir_exists,
     file_exists,
     save_file,
-    UNLIMITED,
 )
 
 

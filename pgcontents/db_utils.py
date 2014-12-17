@@ -17,6 +17,7 @@ Utilities for working with databases.
 """
 
 from contextlib import contextmanager
+from itertools import izip
 
 from psycopg2.errorcodes import UNIQUE_VIOLATION
 from sqlalchemy.exc import IntegrityError
@@ -29,3 +30,16 @@ def ignore_unique_violation():
     except IntegrityError as error:
         if error.orig.pgcode != UNIQUE_VIOLATION:
             raise
+
+
+def to_dict(fields, row):
+    """
+    Convert a SQLAlchemy row to a dict.
+
+    If row is None, return None.
+    """
+    assert(len(fields) == len(row))
+    return {
+        field.name: value
+        for field, value in izip(fields, row)
+    }

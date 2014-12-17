@@ -45,6 +45,8 @@ from sqlalchemy import (
 from sqlalchemy.engine.base import Engine
 from tornado import web
 
+from .api_utils import to_api_path
+from .constants import UNLIMITED
 from .error import (
     DirectoryNotEmpty,
     FileExists,
@@ -52,7 +54,7 @@ from .error import (
     NoSuchDirectory,
     NoSuchFile,
 )
-from .schema import (
+from .query import (
     create_checkpoint,
     delete_checkpoint,
     delete_file,
@@ -67,8 +69,6 @@ from .schema import (
     rename_file,
     restore_checkpoint,
     save_file,
-    to_api_path,
-    UNLIMITED,
 )
 
 # We don't currently track created/modified dates for directories, so this
