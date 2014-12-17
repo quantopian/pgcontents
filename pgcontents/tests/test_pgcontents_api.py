@@ -18,10 +18,18 @@ Run IPython's APITest for ContentsManager using PostgresContentsManager.
 from base64 import (
     b64encode,
 )
+import json
+
 from IPython.config import Config
 from IPython.html.services.contents.tests.test_contents_api import APITest
+from IPython.html.tests.launchnotebook import assert_http_error
+from IPython.nbformat import from_dict
+from IPython.nbformat.v4 import (
+    new_markdown_cell,
+)
 
 from ..pgmanager import (
+    PostgresContentsManager,
     writes_base64,
 )
 from ..schema import (
@@ -35,8 +43,7 @@ from ..schema import (
 class PGContentsAPITest(APITest):
 
     config = Config()
-    config.NotebookApp.contents_manager_class = \
-        'pgcontents.pgmanager.PostgresContentsManager'
+    config.NotebookApp.contents_manager_class = PostgresContentsManager
     config.PostgresContentsManager.user_id = 'test'
 
     # Don't support hidden directories.
@@ -99,5 +106,48 @@ class PGContentsAPITest(APITest):
     def tearDown(self):
         self.contents_manager.purge()
     # End superclass method overrides.
+
+    # Test overrides.
+    def test_mkdir_hidden_400(self):
+        """
+        We don't support hidden directories.
+        """
+        pass
+
+    def test_checkpoints(self):
+        resp = self.api.read('foo/a.ipynb')
+        r = self.api.new_checkpoint('foo/a.ipynb')
+        self.assertEqual(r.status_code, 201)
+        cp1 = r.json()
+        self.assertEqual(set(cp1), {'id', 'last_modified'})
+        self.assertEqual(r.headers['Location'].split('/')[-1], cp1['id'])
+
+        # Modify it
+        nbcontent = json.loads(resp.text)['content']
+        nb = from_dict(nbcontent)
+        hcell = new_markdown_cell('Created by test')
+        nb.cells.append(hcell)
+        # Save
+        nbmodel = {'content': nb, 'type': 'notebook'}
+        resp = self.api.save('foo/a.ipynb', body=json.dumps(nbmodel))
+
+        # List checkpoints
+        cps = self.api.get_checkpoints('foo/a.ipynb').json()
+        self.assertIn(cp1, cps)
+
+        nbcontent = self.api.read('foo/a.ipynb').json()['content']
+        nb = from_dict(nbcontent)
+        self.assertEqual(nb.cells[0].source, 'Created by test')
+
+        # Restore cp1
+        r = self.api.restore_checkpoint('foo/a.ipynb', cp1['id'])
+        self.assertEqual(r.status_code, 204)
+        nbcontent = self.api.read('foo/a.ipynb').json()['content']
+        nb = from_dict(nbcontent)
+        self.assertEqual(nb.cells, [])
+
+        # We explicitly don't support deleting checkpoints right now.
+        with assert_http_error(500):
+            self.api.delete_checkpoint('foo/a.ipynb', cp1['id'])
 
 del APITest

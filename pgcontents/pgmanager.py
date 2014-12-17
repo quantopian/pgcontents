@@ -37,6 +37,7 @@ from IPython.utils.traitlets import (
 )
 from IPython.html.services.contents.manager import ContentsManager
 
+from six import text_type
 from sqlalchemy import (
     create_engine,
 )
@@ -50,6 +51,7 @@ from .error import (
     NoSuchFile,
 )
 from .schema import (
+    all_checkpoints,
     delete_file,
     delete_directory,
     dir_exists,
@@ -57,8 +59,10 @@ from .schema import (
     ensure_directory,
     get_directory,
     get_file,
+    current_checkpoint,
     purge_user,
     rename_file,
+    restore_checkpoint,
     save_file,
     to_api_path,
 )
@@ -468,12 +472,47 @@ class PostgresContentsManager(ContentsManager):
                 self.no_such_entity(path)
 
     def create_checkpoint(self, path):
-        raise NotImplementedError()
+        """
+        We create 'checkpoints' automatically on every save, so just return the
+        most recent checkpoint id.
+        """
+        with self.engine.begin() as db:
+            try:
+                record = current_checkpoint(db, self.user_id, path)
+            except NoSuchFile:
+                self.no_such_entity(path)
+        return self._checkpoint_from_record(record)
+
+    def _checkpoint_from_record(self, record):
+        """
+        Convert a database record to a checkpoint.
+        """
+        return {
+            'id': text_type(record['id']),
+            'last_modified': record['created_at'],
+        }
 
     def list_checkpoints(self, path):
-        raise NotImplementedError()
+        with self.engine.begin() as db:
+            try:
+                records = all_checkpoints(db, self.user_id, path)
+            except NoSuchFile:
+                self.no_such_entity(path)
+
+        return [self._checkpoint_from_record(record) for record in records]
 
     def restore_checkpoint(self, checkpoint_id, path):
+        with self.engine.begin() as db:
+            try:
+                restore_checkpoint(db, self.user_id, checkpoint_id, path)
+            except NoSuchFile:
+                self.no_such_entity(
+                    "Path: {path}, Checkpoint: {checkpoint_id}".format(
+                        path=path, checkpoint_id=checkpoint_id,
+                    )
+                )
+
+    def delete_checkpoint(self, checkpoint_id, path):
         raise NotImplementedError()
     # End ContentsManager API.
 
@@ -501,4 +540,3 @@ class PostgresContentsManager(ContentsManager):
 
     def do_500(self, msg):
         raise web.HTTPError(500, msg)
-

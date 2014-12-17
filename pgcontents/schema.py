@@ -544,3 +544,61 @@ def get_directory(db, user_id, api_dirname, content):
         'files': files,
         'subdirs': subdirectories,
     }
+
+
+def _checkpoint_default_fields():
+    return files.c.id, files.c.created_at
+
+
+def _get_checkpoints(db, user_id, api_path, limit=None):
+    """
+    Get checkpoints from the database.
+    """
+    query_fields = _checkpoint_default_fields()
+    query = select(
+        query_fields,
+    ).where(
+        _file_where(user_id, api_path),
+    ).order_by(
+        desc(files.c.created_at)
+    )
+    if limit is not None:
+        query = query.limit(limit)
+
+    results = [to_dict(query_fields, record) for record in db.execute(query)]
+    if not results:
+        raise NoSuchFile(api_path)
+
+    return results
+
+
+def current_checkpoint(db, user_id, api_path):
+    """
+    Get the most recent checkpoint.
+    """
+    return _get_checkpoints(db, user_id, api_path, limit=1)[0]
+
+
+def all_checkpoints(db, user_id, api_path):
+    """
+    Get all checkpoints for an api_path.
+    """
+    return _get_checkpoints(db, user_id, api_path)
+
+
+def restore_checkpoint(db, user_id, checkpoint_id, api_path):
+    """
+    Restore a checkpoint by bumping its created_at date to now.
+    """
+    result = db.execute(
+        files.update().where(
+            and_(
+                _file_where(user_id, api_path),
+                files.c.id == int(checkpoint_id),
+            )
+        ).values(
+            created_at=func.now(),
+        )
+    )
+    if not result.rowcount:
+        raise NoSuchFile()
