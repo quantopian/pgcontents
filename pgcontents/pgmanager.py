@@ -51,7 +51,8 @@ from .error import (
     NoSuchFile,
 )
 from .schema import (
-    all_checkpoints,
+    create_checkpoint,
+    delete_checkpoint,
     delete_file,
     delete_directory,
     dir_exists,
@@ -59,7 +60,7 @@ from .schema import (
     ensure_directory,
     get_directory,
     get_file,
-    current_checkpoint,
+    list_checkpoints,
     purge_user,
     rename_file,
     restore_checkpoint,
@@ -478,7 +479,7 @@ class PostgresContentsManager(ContentsManager):
         """
         with self.engine.begin() as db:
             try:
-                record = current_checkpoint(db, self.user_id, path)
+                record = create_checkpoint(db, self.user_id, path)
             except NoSuchFile:
                 self.no_such_entity(path)
         return self._checkpoint_from_record(record)
@@ -495,7 +496,7 @@ class PostgresContentsManager(ContentsManager):
     def list_checkpoints(self, path):
         with self.engine.begin() as db:
             try:
-                records = all_checkpoints(db, self.user_id, path)
+                records = list_checkpoints(db, self.user_id, path)
             except NoSuchFile:
                 self.no_such_entity(path)
 
@@ -504,7 +505,7 @@ class PostgresContentsManager(ContentsManager):
     def restore_checkpoint(self, checkpoint_id, path):
         with self.engine.begin() as db:
             try:
-                restore_checkpoint(db, self.user_id, checkpoint_id, path)
+                restore_checkpoint(db, self.user_id, path, checkpoint_id)
             except NoSuchFile:
                 self.no_such_entity(
                     "Path: {path}, Checkpoint: {checkpoint_id}".format(
@@ -513,8 +514,15 @@ class PostgresContentsManager(ContentsManager):
                 )
 
     def delete_checkpoint(self, checkpoint_id, path):
-        raise NotImplementedError()
-    # End ContentsManager API.
+        with self.engine.begin() as db:
+            try:
+                delete_checkpoint(db, self.user_id, path, checkpoint_id)
+            except NoSuchFile:
+                self.no_such_entity(
+                    "Path: {path}, Checkpoint: {checkpoint_id}".format(
+                        path=path, checkpoint_id=checkpoint_id,
+                    )
+                )
 
     def no_such_entity(self, path):
         self.do_404(

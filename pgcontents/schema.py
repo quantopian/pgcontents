@@ -34,6 +34,7 @@ from sqlalchemy import (
     func,
     null,
     select,
+    text,
 )
 from sqlalchemy.exc import IntegrityError
 
@@ -154,6 +155,25 @@ files = Table(
         ['user_id', 'parent_name'],
         ['directories.user_id', 'directories.name'],
     ),
+)
+
+
+checkpoints = Table(
+    'checkpoints',
+    metadata,
+    Column('id', Integer(), nullable=False, primary_key=True),
+    Column(
+        'file_id',
+        Integer(),
+        ForeignKey(
+            files.c.id,
+            # Delete checkpoint entries when referenced files are deleted.
+            onupdate='CASCADE',
+            ondelete='CASCADE',
+        ),
+        nullable=False,
+    ),
+    Column('created_at', DateTime, default=func.now(), nullable=False),
 )
 
 
@@ -280,6 +300,28 @@ def _file_where(user_id, api_path):
     )
 
 
+def _file_creation_order():
+    """
+    Return an order_by on file creation date.
+    """
+    return desc(files.c.created_at)
+
+
+def _select_file(user_id, api_path, fields, limit):
+    """
+    Return a SELECT statement that returns the latest N versions of a file.
+    """
+    query = select(fields).where(
+        _file_where(user_id, api_path),
+    ).order_by(
+        _file_creation_order(),
+    )
+    if limit is not None:
+        query = query.limit(limit)
+
+    return query
+
+
 def _is_in_directory(table, user_id, db_dirname):
     """
     Return a WHERE clause that matches entries in a directory.
@@ -324,13 +366,7 @@ def get_file(db, user_id, api_path, include_content):
         query_fields.append(files.c.content)
 
     result = db.execute(
-        select(query_fields).where(
-            _file_where(user_id, api_path),
-        ).order_by(
-            desc(files.c.created_at)
-        ).limit(
-            1
-        )
+        _select_file(user_id, api_path, query_fields, limit=1),
     ).first()
 
     if result is None:
@@ -547,13 +583,14 @@ def get_directory(db, user_id, api_dirname, content):
 
 
 def _checkpoint_default_fields():
-    return files.c.id, files.c.created_at
+    return checkpoints.c.id, checkpoints.c.created_at
 
 
 def _get_checkpoints(db, user_id, api_path, limit=None):
     """
     Get checkpoints from the database.
     """
+    raise NotImplementedError()
     query_fields = _checkpoint_default_fields()
     query = select(
         query_fields,
@@ -572,33 +609,96 @@ def _get_checkpoints(db, user_id, api_path, limit=None):
     return results
 
 
-def current_checkpoint(db, user_id, api_path):
+def create_checkpoint(db, user_id, api_path):
     """
-    Get the most recent checkpoint.
+    Create a checkpoint.
     """
-    return _get_checkpoints(db, user_id, api_path, limit=1)[0]
+    latest_version = _select_file(
+        user_id,
+        api_path,
+        [files.c.id],
+        limit=1,
+    )
+
+    return_fields = _checkpoint_default_fields()
+    query = checkpoints.insert().values(
+        file_id=latest_version,
+    ).returning(
+        *return_fields
+    )
+    results = [to_dict(return_fields, record) for record in db.execute(query)]
+    if not results:
+        raise NoSuchFile(api_path)
+    assert len(results) == 1
+    return results[0]
 
 
-def all_checkpoints(db, user_id, api_path):
+def list_checkpoints(db, user_id, api_path):
     """
     Get all checkpoints for an api_path.
     """
-    return _get_checkpoints(db, user_id, api_path)
-
-
-def restore_checkpoint(db, user_id, checkpoint_id, api_path):
-    """
-    Restore a checkpoint by bumping its created_at date to now.
-    """
-    result = db.execute(
-        files.update().where(
-            and_(
-                _file_where(user_id, api_path),
-                files.c.id == int(checkpoint_id),
-            )
-        ).values(
-            created_at=func.now(),
+    query_fields = _checkpoint_default_fields()
+    query = _select_file(
+        user_id,
+        api_path,
+        query_fields,
+        limit=None,
+    ).select_from(
+        files.join(
+            checkpoints,
+            files.c.id == checkpoints.c.file_id,
         )
     )
+    results = [to_dict(query_fields, record) for record in db.execute(query)]
+    return results
+
+
+def restore_checkpoint(db, user_id, api_path, checkpoint_id):
+    """
+    Restore a checkpoint by bumping its file's created_at date to now.
+    """
+    query = files.update().where(
+        checkpoints.c.id == checkpoint_id
+    ).where(
+        files.c.id == checkpoints.c.file_id,
+    ).where(
+        _file_where(user_id, api_path),
+    ).values(
+        created_at=func.now(),
+    )
+    result = db.execute(
+        query,
+    )
+    if not result.rowcount:
+        raise NoSuchFile()
+
+
+def delete_checkpoint(db, user_id, api_path, checkpoint_id):
+    """
+    Delete a checkpoint.
+    """
+    # We do this manually because SQLAlchemy doesn't support DELETE FROM USING.
+    # See https://bitbucket.org/zzzeek/sqlalchemy/issue/959.
+    querytext = text(
+        """
+        DELETE FROM checkpoints
+        USING files
+        WHERE
+            (files.user_id = :user_id) AND
+            (files.name = :name) AND
+            (files.parent_name = :parent_name) AND
+            (checkpoints.id = :checkpoint_id) AND
+            (checkpoints.file_id = files.id)
+        """
+    )
+    directory, name = split_api_filepath(api_path)
+    result = db.execute(
+        querytext,
+        user_id=user_id,
+        name=name,
+        parent_name=directory,
+        checkpoint_id=checkpoint_id,
+    )
+
     if not result.rowcount:
         raise NoSuchFile()
