@@ -474,6 +474,7 @@ def rename_file(db, user_id, old_api_path, new_api_path):
 
 UNLIMITED = 0
 
+
 def check_content(content, max_size_bytes):
     """
     Check that the content to be saved isn't too large to store.
