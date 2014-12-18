@@ -22,7 +22,8 @@ CONFIRM_MIGRATION = dedent(
     """
     About to run schema migrations against supplied database URL:
     It is HIGHLY recommended that you back up stored data before proceeding.
-    """
+
+    Proceed?"""
 )
 
 
@@ -42,6 +43,7 @@ CONFIRM_MIGRATION = dedent(
 )
 def init(db_url, prompt):
 
+    click.echo("Initializing pgcontents...")
     with TemporaryDirectory() as tempdir:
         alembic_ini = join(tempdir, 'temp_alembic.ini')
         with open(alembic_ini, 'w') as f:
