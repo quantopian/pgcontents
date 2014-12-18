@@ -43,4 +43,3 @@ def split_api_filepath(path):
         dirname = parts[0] + '/'
 
     return from_api_dirname(dirname), name
-
