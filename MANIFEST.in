@@ -1,1 +1,7 @@
 include pgcontents/alembic.ini.template
+include LICENSE
+include requirements.txt
+
+global-exclude *~
+global-exclude *.pyc
+global-exclude *.pyo
