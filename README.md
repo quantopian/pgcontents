@@ -7,10 +7,13 @@ This repository is under development as part of the [Quantopian Research Environ
 
 Getting Started
 ---------------
-0. Clone this repo via `git clone git@github.com:quantopian/pgcontents.git`.
-1. Install dependencies via `pip install -r requirements.txt`.
-2. Edit `pgcontents/alembic.ini` and point `sqlalchemy.url` to a postgres database you have read/write access to.
-3. Create/upgrade your database schema to the most recent migration by running: `alembic upgrade head`.
-4. Run the tests with `nosetests pgcontents/tests`.
-5. ???
-6. Profit!
+**Prerequisites:**
+ - Write access to an empty [PostgreSQL](postgresql.org) database.
+ - A Python installation with the latest master of [IPython Notebook](github.com/ipython/ipython).
+
+**Installation**
+
+0. Install `pgcontents` from PyPI via `pip install pgcontents`.
+1. Run `pgcontents init` to configure your database.  You will be prompted for a database URL for pgcontents to use for storage.
+2. Configure IPython Notebook to use `PostgresContentsManager` as its storage backend.  This can be done from the command line or by modifying your `ipython_notebook_config.py` file.  See `examples/example_ipython_notebook_config.py` for an example config file.
+3. Enjoy your filesystem-free IPython experience!
