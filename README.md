@@ -8,8 +8,8 @@ This repository is under development as part of the [Quantopian Research Environ
 Getting Started
 ---------------
 **Prerequisites:**
- - Write access to an empty [PostgreSQL](postgresql.org) database.
- - A Python installation with the latest master of [IPython Notebook](github.com/ipython/ipython).
+ - Write access to an empty [PostgreSQL](http://www.postgresql.org) database.
+ - A Python installation with the latest master of [IPython Notebook](https://www.github.com/ipython/ipython).
 
 **Installation:**
 
