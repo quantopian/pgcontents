@@ -1,0 +1,63 @@
+#!/usr/bin/env python
+from os.path import join
+import subprocess
+from textwrap import dedent
+
+import click
+from IPython.utils.tempdir import TemporaryDirectory
+
+from pgcontents.constants import (
+    ALEMBIC_INI_TEMPLATE,
+    ALEMBIC_DIR_LOCATION,
+    DB_URL_ENVVAR,
+)
+
+
+@click.group()
+def main():
+    pass
+
+
+CONFIRM_MIGRATION = dedent(
+    """
+    About to run schema migrations against supplied database URL:
+    It is HIGHLY recommended that you back up stored data before proceeding.
+    """
+)
+
+
+@main.command()
+@click.option(
+    '-u', '--db-url',
+    type=click.STRING,
+    help='SQLAlchemy connection string for file database.',
+    envvar=DB_URL_ENVVAR,
+    prompt="File Database URL: ",
+    confirmation_prompt=True,
+)
+@click.option(
+    '--prompt/--no-prompt',
+    default=True,
+    help="If passed, don't prompt for confirmation before migrating DB.",
+)
+def init(db_url, prompt):
+
+    with TemporaryDirectory() as tempdir:
+        alembic_ini = join(tempdir, 'temp_alembic.ini')
+        with open(alembic_ini, 'w') as f:
+            f.write(
+                ALEMBIC_INI_TEMPLATE.format(
+                    alembic_dir_location=ALEMBIC_DIR_LOCATION,
+                    sqlalchemy_url=db_url,
+                )
+            )
+        if prompt:
+            click.confirm(CONFIRM_MIGRATION, abort=True)
+        subprocess.call(
+            ['alembic', '-c', alembic_ini, 'upgrade', 'head']
+        )
+    click.echo('Setup completed successfully.')
+
+
+if __name__ == "__main__":
+    main()
