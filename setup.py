@@ -25,7 +25,7 @@ def main():
 
     setup(
         name='pgcontents',
-        version='0.1.0',
+        version='0.0.1',
         description="A Postgres-backed ContentsManager for IPython.",
         author="Scott Sanderson",
         author_email="ssanderson@quantopian.com",
