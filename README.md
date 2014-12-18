@@ -11,7 +11,7 @@ Getting Started
  - Write access to an empty [PostgreSQL](postgresql.org) database.
  - A Python installation with the latest master of [IPython Notebook](github.com/ipython/ipython).
 
-**Installation**
+**Installation:**
 
 0. Install `pgcontents` from PyPI via `pip install pgcontents`.
 1. Run `pgcontents init` to configure your database.  You will be prompted for a database URL for pgcontents to use for storage.
