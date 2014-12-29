@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from contextlib import contextmanager
 from os.path import join
 import subprocess
 from textwrap import dedent
@@ -20,11 +21,30 @@ def main():
 
 CONFIRM_MIGRATION = dedent(
     """
-    About to run schema migrations against supplied database URL:
-    It is HIGHLY recommended that you back up stored data before proceeding.
+    About to run schema migrations against supplied database URL.
+
+    It is *HIGHLY* recommended that you back up stored data before proceeding.
 
     Proceed?"""
 )
+
+
+@contextmanager
+def temp_alembic_ini(alembic_dir_location, sqlalchemy_url):
+    """
+    Temporarily write an alembic.ini file for use with alembic migration
+    scripts.
+    """
+    with TemporaryDirectory() as tempdir:
+        alembic_ini_filename = join(tempdir, 'temp_alembic.ini')
+        with open(alembic_ini_filename, 'w') as f:
+            f.write(
+                ALEMBIC_INI_TEMPLATE.format(
+                    alembic_dir_location=ALEMBIC_DIR_LOCATION,
+                    sqlalchemy_url=sqlalchemy_url,
+                )
+            )
+        yield alembic_ini_filename
 
 
 @main.command()
@@ -33,32 +53,56 @@ CONFIRM_MIGRATION = dedent(
     type=click.STRING,
     help='SQLAlchemy connection string for file database.',
     envvar=DB_URL_ENVVAR,
-    prompt="File Database URL: ",
+    prompt="File Database URL",
     confirmation_prompt=True,
+)
+@click.option(
+    '-r', '--revision',
+    type=click.STRING,
+    help="Revision ID to upgrade to.",
+    default='head',
 )
 @click.option(
     '--prompt/--no-prompt',
     default=True,
     help="If passed, don't prompt for confirmation before migrating DB.",
 )
-def init(db_url, prompt):
-
-    click.echo("Initializing pgcontents...")
-    with TemporaryDirectory() as tempdir:
-        alembic_ini = join(tempdir, 'temp_alembic.ini')
-        with open(alembic_ini, 'w') as f:
-            f.write(
-                ALEMBIC_INI_TEMPLATE.format(
-                    alembic_dir_location=ALEMBIC_DIR_LOCATION,
-                    sqlalchemy_url=db_url,
-                )
-            )
+def upgrade(db_url, revision, prompt):
+    """
+    Initialize a database for use with pgcontents.
+    """
+    click.echo("Updating pgcontents...")
+    with temp_alembic_ini(ALEMBIC_DIR_LOCATION, db_url) as alembic_ini:
         if prompt:
             click.confirm(CONFIRM_MIGRATION, abort=True)
         subprocess.call(
-            ['alembic', '-c', alembic_ini, 'upgrade', 'head']
+            ['alembic', '-c', alembic_ini, 'upgrade', revision]
         )
-    click.echo('Setup completed successfully.')
+
+    click.echo('Update completed successfully.')
+
+
+@main.command()
+@click.option(
+    '-u', '--db-url',
+    type=click.STRING,
+    help='SQLAlchemy connection string for file database.',
+    envvar=DB_URL_ENVVAR,
+    prompt="File Database URL",
+    confirmation_prompt=True,
+)
+def gen_migration(db_url):
+    """
+    Use alembic revision --autogenerate to create a new migration from
+    schema.py.
+
+    You probably don't need to use this unless you're doing local development
+    or changing the default pgcontents schema.
+    """
+    with temp_alembic_ini(ALEMBIC_DIR_LOCATION, db_url) as alembic_ini:
+        subprocess.call(
+            ['alembic', '-c', alembic_ini, 'revision', '--autogenerate']
+        )
 
 
 if __name__ == "__main__":
