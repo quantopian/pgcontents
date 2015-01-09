@@ -24,3 +24,4 @@ requests==2.5.0
 six==1.8.0
 click==3.3
 python-dateutil
+nose-ignore-docstring
