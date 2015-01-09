@@ -2,10 +2,16 @@
 Setup/Teardown for tests.
 """
 
+from .utils import (
+    drop_testing_db_tables,
+    migrate_testing_db,
+)
+
 
 def setup_module():
-    pass
+    drop_testing_db_tables()
+    migrate_testing_db()
 
 
 def teardown_module():
-    pass
+    drop_testing_db_tables()

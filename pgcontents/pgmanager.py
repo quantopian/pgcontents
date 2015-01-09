@@ -15,37 +15,28 @@
 """
 PostgreSQL implementation of IPython ContentsManager API.
 """
-
-from base64 import (
-    b64decode,
-    b64encode,
-)
+from __future__ import unicode_literals
 from datetime import datetime
-from getpass import getuser
 from itertools import chain
-
-import mimetypes
 
 from IPython.nbformat import (
     from_dict,
-    reads,
-    writes,
 )
 from IPython.utils.traitlets import (
-    Instance,
+    Bool,
     Integer,
-    Unicode,
 )
 from IPython.html.services.contents.manager import ContentsManager
-
 from six import text_type
-from sqlalchemy import (
-    create_engine,
-)
-from sqlalchemy.engine.base import Engine
 from tornado import web
 
-from .api_utils import to_api_path
+from .api_utils import (
+    to_api_path,
+    writes_base64,
+    reads_base64,
+    from_b64,
+    to_b64,
+)
 from .constants import UNLIMITED
 from .error import (
     DirectoryNotEmpty,
@@ -54,13 +45,13 @@ from .error import (
     NoSuchDirectory,
     NoSuchFile,
 )
+from .managerbase import PostgresManagerMixin
 from .query import (
     create_checkpoint,
     delete_checkpoint,
     delete_file,
     delete_directory,
     dir_exists,
-    ensure_db_user,
     ensure_directory,
     get_directory,
     get_file,
@@ -74,117 +65,68 @@ from .query import (
 # We don't currently track created/modified dates for directories, so this
 # value is always used instead.
 DUMMY_CREATED_DATE = datetime.fromtimestamp(0)
-NBFORMAT_VERSION = 4
 
 
-def writes_base64(nb, version=NBFORMAT_VERSION):
-    """
-    Write a notebook as base64.
-    """
-    return b64encode(writes(nb, version=version).encode('utf-8'))
-
-
-def reads_base64(nb, as_version=NBFORMAT_VERSION):
-    """
-    Read a notebook from base64.
-    """
-    return reads(b64decode(nb).decode('utf-8'), as_version=as_version)
-
-
-def _decode_text_from_base64(path, bcontent):
-    content = b64decode(bcontent)
-    try:
-        return (content.decode('utf-8'), 'text')
-    except UnicodeError:
-        raise web.HTTPError(
-            400,
-            "%s is not UTF-8 encoded" % path, reason='bad format'
-        )
-
-
-def _decode_unknown_from_base64(path, bcontent):
-    content = b64decode(bcontent)
-    try:
-        return (content.decode('utf-8'), 'text')
-    except UnicodeError:
-        pass
-    return bcontent.decode('ascii'), 'base64'
-
-
-def from_b64(path, bcontent, format):
-    """
-    Decode base64 content for a file.
-
-    format:
-      If 'text', the contents will be decoded as UTF-8.
-      If 'base64', do nothing.
-      If not specified, try to decode as UTF-8, and fall back to base64
-
-    Returns a triple of decoded_content, format, and mimetype.
-    """
-    decoders = {
-        'base64': lambda path, bcontent: (bcontent.decode('ascii'), 'base64'),
-        'text': _decode_text_from_base64,
-        None: _decode_unknown_from_base64,
-    }
-    content, real_format = decoders[format](path, bcontent)
-
-    default_mimes = {
-        'text': 'text/plain',
-        'base64': 'application/octet-stream',
-    }
-    mimetype = mimetypes.guess_type(path)[0] or default_mimes[real_format]
-
-    return content, real_format, mimetype
-
-
-class PostgresContentsManager(ContentsManager):
+class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     """
     ContentsManager that persists to a postgres database rather than to the
     local filesystem.
     """
-    db_url = Unicode(
-        default_value="postgresql://{user}@/pgcontents".format(
-            user=getuser(),
-        ),
-        config=True,
-        help="Connection string for the database.",
-    )
-
-    user_id = Unicode(
-        default_value=getuser(),
-        config=True,
-        help="Name for the user whose contents we're managing.",
-    )
-
     max_file_size_bytes = Integer(
         default_value=UNLIMITED,
         config=True,
         help="Maximum size in bytes of a file that will be saved.",
     )
 
-    engine = Instance(Engine)
+    create_directory_on_startup = Bool(
+        config=True,
+        help="Create a user for user_id automatically?",
+    )
 
-    def _engine_default(self):
-        return create_engine(self.db_url)
+    def _create_directory_on_startup_default(self):
+        return self.create_user_on_startup
 
     def __init__(self, *args, **kwargs):
         super(PostgresContentsManager, self).__init__(*args, **kwargs)
-        self.ensure_user()
+        if self.create_directory_on_startup:
+            self.ensure_root_directory()
 
-    def ensure_user(self):
-        with self.engine.begin() as db:
-            ensure_db_user(db, self.user_id)
-
+    def ensure_root_directory(self):
         with self.engine.begin() as db:
             ensure_directory(db, self.user_id, '')
 
-    def purge(self):
+    def purge_db(self):
         """
         Clear all matching our user_id.
         """
         with self.engine.begin() as db:
             purge_user(db, self.user_id)
+
+    def _base_model(self, path):
+        """
+        Return model keys shared by all types.
+        """
+        return {
+            "name": path.rsplit('/', 1)[-1],
+            "path": path,
+            "writable": True,
+            "last_modified": None,
+            "created": None,
+            "content": None,
+            "format": None,
+            "mimetype": None,
+        }
+
+    def guess_type(self, path):
+        """
+        Guess the type of a file.
+        """
+        if path.endswith('.ipynb'):
+            return 'notebook'
+        elif self.dir_exists(path):
+            return 'directory'
+        else:
+            return 'file'
 
     # Begin ContentsManager API.
     def dir_exists(self, path):
@@ -202,21 +144,6 @@ class PostgresContentsManager(ContentsManager):
             except NoSuchFile:
                 return False
 
-    def _base_model(self, path):
-        """
-        Return model keys shared by all types.
-        """
-        return {
-            "name": path.rsplit('/', 1)[-1],
-            "path": path,
-            "writable": True,
-            "last_modified": None,
-            "created": None,
-            "content": None,
-            "format": None,
-            "mimetype": None,
-        }
-
     def get(self, path, content=True, type=None, format=None):
         if type is None:
             type = self.guess_type(path)
@@ -228,17 +155,6 @@ class PostgresContentsManager(ContentsManager):
             return self._get_file(path, content, format)
         else:
             raise ValueError("Unknown type passed: {}".format(type))
-
-    def guess_type(self, path):
-        """
-        Guess the type of a file.
-        """
-        if path.endswith('.ipynb'):
-            return 'notebook'
-        elif self.dir_exists(path):
-            return 'directory'
-        else:
-            return 'file'
 
     def _get_notebook(self, path, content, format):
         """
@@ -415,25 +331,11 @@ class PostgresContentsManager(ContentsManager):
         """
         Save a non-notebook file.
         """
-        fmt = model.get('format', None)
-        allowed_formats = {'text', 'base64'}
-        if fmt not in allowed_formats:
-            self.do_400(
-                "Expected file contents in {allowed}, got {fmt}".format(
-                    allowed=allowed_formats,
-                    fmt=fmt,
-                )
-            )
-        if fmt == 'text':
-            bcontent = b64encode(model['content'].encode('utf8'))
-        else:
-            bcontent = model['content'].encode('ascii')
-
         save_file(
             db,
             self.user_id,
             path,
-            bcontent,
+            to_b64(model['content'], model.get('format', None)),
             self.max_file_size_bytes,
         )
         return None
@@ -552,34 +454,3 @@ class PostgresContentsManager(ContentsManager):
                     )
                 )
     # End ContentsManager API.
-
-    def no_such_entity(self, path):
-        self.do_404(
-            u"No such entity: [{path}]".format(path=path)
-        )
-
-    def not_empty(self, path):
-        self.do_400(
-            u"Directory not empty: [{path}]".format(path=path)
-        )
-
-    def file_too_large(self, path):
-        self.do_413(u"File is too large to save: [{path}]".format(path=path))
-
-    def already_exists(self, path):
-        self.do_409(u"File already exists: [{path}]".format(path=path))
-
-    def do_400(self, msg):
-        raise web.HTTPError(400, msg)
-
-    def do_404(self, msg):
-        raise web.HTTPError(404, msg)
-
-    def do_409(self, msg):
-        raise web.HTTPError(409, msg)
-
-    def do_413(self, msg):
-        raise web.HTTPError(413, msg)
-
-    def do_500(self, msg):
-        raise web.HTTPError(500, msg)

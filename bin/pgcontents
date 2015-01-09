@@ -1,22 +1,64 @@
 #!/usr/bin/env python
-from contextlib import contextmanager
+from getpass import getuser
+from os import getcwd
 from os.path import join
 import subprocess
 from textwrap import dedent
 
 import click
-from IPython.utils.tempdir import TemporaryDirectory
 
 from pgcontents.constants import (
-    ALEMBIC_INI_TEMPLATE,
     ALEMBIC_DIR_LOCATION,
     DB_URL_ENVVAR,
 )
 
+from pgcontents.utils.migrate import (
+    temp_alembic_ini,
+    upgrade,
+)
+from pgcontents.utils.sync import (
+    checkpoint_all,
+    download_checkpoints,
+)
 
-@click.group()
+
+@click.group(context_settings=dict(help_option_names=['-h', '--help']))
 def main():
+    """
+    Create or manage a pgcontents database.
+
+    For documentation on sub-commands, do:
+
+    pgcontents [COMMAND] --help
+    """
     pass
+
+
+# Options
+_db_url = click.option(
+    '-u', '--db-url',
+    type=click.STRING,
+    help='SQLAlchemy connection string for database.',
+    envvar=DB_URL_ENVVAR,
+    prompt="File Database URL",
+    confirmation_prompt=True,
+)
+_directory = click.option(
+    '-d', '--directory',
+    type=click.Path(
+        exists=True,
+        writable=True,
+        resolve_path=True,
+    ),
+    help="Path to a local directory.",
+    default=getcwd(),
+)
+_users = click.option(
+    '-u', '--users',
+    type=click.STRING,
+    help="Comma-separated list of users to sync.",
+    default=getuser(),
+)
 
 
 CONFIRM_MIGRATION = dedent(
@@ -29,33 +71,8 @@ CONFIRM_MIGRATION = dedent(
 )
 
 
-@contextmanager
-def temp_alembic_ini(alembic_dir_location, sqlalchemy_url):
-    """
-    Temporarily write an alembic.ini file for use with alembic migration
-    scripts.
-    """
-    with TemporaryDirectory() as tempdir:
-        alembic_ini_filename = join(tempdir, 'temp_alembic.ini')
-        with open(alembic_ini_filename, 'w') as f:
-            f.write(
-                ALEMBIC_INI_TEMPLATE.format(
-                    alembic_dir_location=ALEMBIC_DIR_LOCATION,
-                    sqlalchemy_url=sqlalchemy_url,
-                )
-            )
-        yield alembic_ini_filename
-
-
-@main.command()
-@click.option(
-    '-u', '--db-url',
-    type=click.STRING,
-    help='SQLAlchemy connection string for file database.',
-    envvar=DB_URL_ENVVAR,
-    prompt="File Database URL",
-    confirmation_prompt=True,
-)
+@main.command('upgrade')
+@_db_url
 @click.option(
     '-r', '--revision',
     type=click.STRING,
@@ -67,30 +84,19 @@ def temp_alembic_ini(alembic_dir_location, sqlalchemy_url):
     default=True,
     help="If passed, don't prompt for confirmation before migrating DB.",
 )
-def upgrade(db_url, revision, prompt):
+def migrate(db_url, revision, prompt):
     """
-    Initialize a database for use with pgcontents.
+    Migrate a database to the current pgcontents schema.
     """
     click.echo("Updating pgcontents...")
-    with temp_alembic_ini(ALEMBIC_DIR_LOCATION, db_url) as alembic_ini:
-        if prompt:
-            click.confirm(CONFIRM_MIGRATION, abort=True)
-        subprocess.call(
-            ['alembic', '-c', alembic_ini, 'upgrade', revision]
-        )
+    if prompt:
+        click.confirm(CONFIRM_MIGRATION, abort=True)
+        upgrade(db_url, revision)
 
     click.echo('Update completed successfully.')
 
 
 @main.command()
-@click.option(
-    '-u', '--db-url',
-    type=click.STRING,
-    help='SQLAlchemy connection string for file database.',
-    envvar=DB_URL_ENVVAR,
-    prompt="File Database URL",
-    confirmation_prompt=True,
-)
 def gen_migration(db_url):
     """
     Use alembic revision --autogenerate to create a new migration from
@@ -100,10 +106,41 @@ def gen_migration(db_url):
     or changing the default pgcontents schema.
     """
     with temp_alembic_ini(ALEMBIC_DIR_LOCATION, db_url) as alembic_ini:
-        subprocess.call(
+        subprocess.check_call(
             ['alembic', '-c', alembic_ini, 'revision', '--autogenerate']
         )
 
+
+@main.command('download_checkpoints')
+@_db_url
+@_directory
+@_users
+def _download_checkpoints(db_url, directory, users):
+    """
+    Download checkpoints to a directory.
+    """
+    users = users.split(',')
+    if len(users) == 1:
+        download_checkpoints(db_url, directory, users[0])
+    else:
+        for user in users:
+            download_checkpoints(db_url, join(directory, user), user)
+
+
+@main.command('checkpoint_all')
+@_db_url
+@_directory
+@_users
+def _checkpoint_all(db_url, directory, users):
+    """
+    Upload a checkpoint for every file in a directory.
+    """
+    users = users.split(',')
+    if len(users) == 1:
+        checkpoint_all(db_url, directory, users[0])
+    else:
+        for user in users:
+            checkpoint_all(db_url, join(directory, user), user)
 
 if __name__ == "__main__":
     main()

@@ -31,6 +31,7 @@ def main():
         author_email="ssanderson@quantopian.com",
         packages=[
             'pgcontents',
+            'pgcontents/utils/',
             'pgcontents/alembic',
             'pgcontents/alembic/versions',
         ],

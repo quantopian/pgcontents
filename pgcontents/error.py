@@ -21,3 +21,7 @@ class DirectoryNotEmpty(Exception):
 
 class FileTooLarge(Exception):
     pass
+
+
+class NoSuchCheckpoint(Exception):
+    pass

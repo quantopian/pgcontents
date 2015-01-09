@@ -33,7 +33,7 @@ metadata = MetaData()
 
 # Shared Types
 UserID = Unicode(30)
-DirectoryName = Unicode(70)
+FilePath = Unicode(70)
 
 users = Table(
     'users',
@@ -65,9 +65,9 @@ directories = Table(
         nullable=False,
         primary_key=True
     ),
-    Column('name', DirectoryName, nullable=False, primary_key=True),
+    Column('name', FilePath, nullable=False, primary_key=True),
     Column('parent_user_id', UserID, nullable=True),
-    Column('parent_name', DirectoryName, nullable=True),
+    Column('parent_name', FilePath, nullable=True),
 
     # =========== #
     # Constraints #
@@ -126,7 +126,7 @@ files = Table(
         ForeignKey(users.c.id),
         nullable=False,
     ),
-    Column('parent_name', DirectoryName, nullable=False),
+    Column('parent_name', FilePath, nullable=False),
     Column('content', LargeBinary(100000), nullable=False),
     Column(
         'created_at',
@@ -157,4 +157,21 @@ checkpoints = Table(
         nullable=False,
     ),
     Column('created_at', DateTime, default=func.now(), nullable=False),
+)
+
+
+# Alternate checkpoint table used by PostgresCheckpointsManager.
+remote_checkpoints = Table(
+    'remote_checkpoints',
+    metadata,
+    Column('id', Integer(), nullable=False, primary_key=True),
+    Column(
+        'user_id',
+        UserID,
+        ForeignKey(users.c.id),
+        nullable=False,
+    ),
+    Column('path', FilePath, nullable=False),
+    Column('content', LargeBinary(100000), nullable=False),
+    Column('last_modified', DateTime, default=func.now(), nullable=False),
 )

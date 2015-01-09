@@ -23,17 +23,22 @@ from IPython.html.services.contents.tests.test_manager import TestContentsManage
 from tornado.web import HTTPError
 
 from ..pgmanager import PostgresContentsManager
+from .utils import TEST_DB_URL
 
 
 class PostgresContentsManagerTestCase(TestContentsManager):
 
     def setUp(self):
-        self.contents_manager = PostgresContentsManager(user_id='test')
-        self.contents_manager.purge()
+        self.contents_manager = PostgresContentsManager(
+            user_id='test',
+            db_url=TEST_DB_URL,
+        )
+        self.contents_manager.purge_db()
         self.contents_manager.ensure_user()
+        self.contents_manager.ensure_root_directory()
 
     def tearDown(self):
-        self.contents_manager.purge()
+        self.contents_manager.purge_db()
 
     def make_dir(self, api_path):
         self.contents_manager.new(

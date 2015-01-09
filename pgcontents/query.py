@@ -6,17 +6,21 @@ from textwrap import dedent
 from psycopg2.errorcodes import FOREIGN_KEY_VIOLATION
 from sqlalchemy import (
     and_,
+    asc,
+    cast,
     desc,
     func,
     null,
     select,
     text,
+    Unicode,
 )
 
 from sqlalchemy.exc import IntegrityError
 
 from .api_utils import (
     from_api_dirname,
+    from_api_filename,
     split_api_filepath,
 )
 from .constants import UNLIMITED
@@ -28,6 +32,7 @@ from .error import (
     DirectoryNotEmpty,
     FileExists,
     FileTooLarge,
+    NoSuchCheckpoint,
     NoSuchDirectory,
     NoSuchFile,
 )
@@ -35,6 +40,7 @@ from .schema import(
     checkpoints,
     directories,
     files,
+    remote_checkpoints,
     users,
 )
 
@@ -531,3 +537,164 @@ def delete_checkpoint(db, user_id, api_path, checkpoint_id):
 
     if not result.rowcount:
         raise NoSuchFile()
+
+
+# =======================================
+# Checkpoints (PostgresCheckpoints)
+# =======================================
+def _remote_checkpoint_default_fields():
+    return [
+        cast(remote_checkpoints.c.id, Unicode),
+        remote_checkpoints.c.last_modified,
+    ]
+
+
+def delete_single_remote_checkpoint(db, user_id, api_path, checkpoint_id):
+    db_path = from_api_filename(api_path)
+    result = db.execute(
+        remote_checkpoints.delete().where(
+            and_(
+                remote_checkpoints.c.user_id == user_id,
+                remote_checkpoints.c.path == db_path,
+                remote_checkpoints.c.id == int(checkpoint_id),
+            ),
+        ),
+    )
+
+    if not result.rowcount:
+        raise NoSuchCheckpoint(api_path, checkpoint_id)
+
+
+def delete_remote_checkpoints(db, user_id, api_path):
+    db_path = from_api_filename(api_path)
+    db.execute(
+        remote_checkpoints.delete().where(
+            and_(
+                remote_checkpoints.c.user_id == user_id,
+                remote_checkpoints.c.path == db_path,
+            ),
+        )
+    )
+
+
+def list_remote_checkpoints(db, user_id, api_path):
+    db_path = from_api_filename(api_path)
+    fields = _remote_checkpoint_default_fields()
+    results = db.execute(
+        select(fields).where(
+            and_(
+                remote_checkpoints.c.user_id == user_id,
+                remote_checkpoints.c.path == db_path,
+            ),
+        ).order_by(
+            asc(remote_checkpoints.c.last_modified),
+        ),
+    )
+
+    return [to_dict(fields, row) for row in results]
+
+
+def move_single_remote_checkpoint(db,
+                                  user_id,
+                                  src_api_path,
+                                  dest_api_path,
+                                  checkpoint_id):
+    src_db_path = from_api_filename(src_api_path)
+    dest_db_path = from_api_filename(dest_api_path)
+    result = db.execute(
+        remote_checkpoints.update().where(
+            and_(
+                remote_checkpoints.c.user_id == user_id,
+                remote_checkpoints.c.path == src_db_path,
+                remote_checkpoints.c.id == int(checkpoint_id),
+            ),
+        ).values(
+            path=dest_db_path,
+        ),
+    )
+
+    if not result.rowcount:
+        raise NoSuchCheckpoint(src_api_path, checkpoint_id)
+
+
+def move_remote_checkpoints(db, user_id, src_api_path, dest_api_path):
+    src_db_path = from_api_filename(src_api_path)
+    dest_db_path = from_api_filename(dest_api_path)
+    db.execute(
+        remote_checkpoints.update().where(
+            and_(
+                remote_checkpoints.c.user_id == user_id,
+                remote_checkpoints.c.path == src_db_path,
+            ),
+        ).values(
+            path=dest_db_path,
+        ),
+    )
+
+
+def get_remote_checkpoint(db, user_id, api_path, checkpoint_id):
+    db_path = from_api_filename(api_path)
+    fields = [remote_checkpoints.c.content]
+    result = db.execute(
+        select(
+            fields,
+        ).where(
+            and_(
+                remote_checkpoints.c.user_id == user_id,
+                remote_checkpoints.c.path == db_path,
+                remote_checkpoints.c.id == int(checkpoint_id),
+            ),
+        )
+    ).first()
+
+    if result is None:
+        raise NoSuchCheckpoint(api_path, checkpoint_id)
+
+    return to_dict(fields, result)
+
+
+def save_remote_checkpoint(db, user_id, api_path, content):
+    return_fields = _remote_checkpoint_default_fields()
+    result = db.execute(
+        remote_checkpoints.insert().values(
+            user_id=user_id,
+            path=from_api_filename(api_path),
+            content=content,
+        ).returning(
+            *return_fields
+        ),
+    ).first()
+
+    return to_dict(return_fields, result)
+
+
+def purge_remote_checkpoints(db, user_id):
+    """
+    Delete all database records for the given user_id.
+    """
+    db.execute(
+        remote_checkpoints.delete().where(
+            remote_checkpoints.c.user_id == user_id,
+        )
+    )
+
+
+def latest_remote_checkpoints(db, user_id):
+    """
+    Get the latest version of each file for the user.
+    """
+    query_fields = [
+        remote_checkpoints.c.id,
+        remote_checkpoints.c.path,
+    ]
+
+    query = select(query_fields).where(
+        remote_checkpoints.c.user_id == user_id,
+    ).order_by(
+        remote_checkpoints.c.path,
+        desc(remote_checkpoints.c.last_modified),
+    ).distinct(
+        remote_checkpoints.c.path,
+    )
+    results = db.execute(query)
+    return (to_dict(query_fields, row) for row in results)

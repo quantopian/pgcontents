@@ -20,7 +20,9 @@ from contextlib import contextmanager
 from itertools import izip
 
 from psycopg2.errorcodes import UNIQUE_VIOLATION
+from sqlalchemy import Column
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.elements import Cast
 
 
 @contextmanager
@@ -32,6 +34,18 @@ def ignore_unique_violation():
             raise
 
 
+def _get_name(column_like):
+    """
+    Get the name from a column-like SQLAlchemy expression.
+
+    Works for Columns and Cast expressions.
+    """
+    if isinstance(column_like, Column):
+        return column_like.name
+    elif isinstance(column_like, Cast):
+        return column_like.clause.name
+
+
 def to_dict(fields, row):
     """
     Convert a SQLAlchemy row to a dict.
@@ -40,6 +54,6 @@ def to_dict(fields, row):
     """
     assert(len(fields) == len(row))
     return {
-        field.name: value
+        _get_name(field): value
         for field, value in izip(fields, row)
     }

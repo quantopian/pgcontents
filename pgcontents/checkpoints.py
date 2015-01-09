@@ -1,0 +1,150 @@
+"""
+An IPython FileContentsManager that uses Postgres for checkpoints.
+"""
+from __future__ import unicode_literals
+
+from IPython.html.services.contents.checkpoints import GenericCheckpointsMixin
+from IPython.html.services.contents.manager import (
+    Checkpoints,
+)
+
+from .api_utils import (
+    _decode_unknown_from_base64,
+    prefix_dirs,
+    reads_base64,
+    to_b64,
+    writes_base64,
+)
+from .managerbase import PostgresManagerMixin
+from .query import (
+    delete_remote_checkpoints,
+    delete_single_remote_checkpoint,
+    get_remote_checkpoint,
+    latest_remote_checkpoints,
+    list_remote_checkpoints,
+    move_remote_checkpoints,
+    move_single_remote_checkpoint,
+    purge_remote_checkpoints,
+    save_remote_checkpoint,
+)
+
+
+class PostgresCheckpoints(PostgresManagerMixin,
+                          GenericCheckpointsMixin,
+                          Checkpoints):
+    """
+    A Checkpoints implementation that saves checkpoints to a remote database.
+    """
+
+    def create_notebook_checkpoint(self, nb, path):
+        """Create a checkpoint of the current state of a notebook
+
+        Returns a checkpoint_id for the new checkpoint.
+        """
+        b64_content = writes_base64(nb)
+        with self.engine.begin() as db:
+            return save_remote_checkpoint(db, self.user_id, path, b64_content)
+
+    def create_file_checkpoint(self, content, format, path):
+        """Create a checkpoint of the current state of a file
+
+        Returns a checkpoint_id for the new checkpoint.
+        """
+        try:
+            b64_content = to_b64(content, format)
+        except ValueError as e:
+            self.do_400(str(e))
+        with self.engine.begin() as db:
+            return save_remote_checkpoint(db, self.user_id, path, b64_content)
+
+    def rename_checkpoint(self, checkpoint_id, old_path, new_path):
+        """Rename a checkpoint from old_path to new_path."""
+        with self.engine.begin() as db:
+            return move_single_remote_checkpoint(
+                db, old_path, new_path, checkpoint_id,
+            )
+
+    def delete_checkpoint(self, checkpoint_id, path):
+        """delete a checkpoint for a file"""
+        with self.engine.begin() as db:
+            return delete_single_remote_checkpoint(
+                db, self.user_id, path, checkpoint_id,
+            )
+
+    def _get_checkpoint(self, checkpoint_id, path):
+        """Get the content of a checkpoint."""
+        with self.engine.begin() as db:
+            return get_remote_checkpoint(
+                db,
+                self.user_id,
+                path,
+                checkpoint_id,
+            )['content']
+
+    def get_notebook_checkpoint(self, checkpoint_id, path):
+        b64_content = self._get_checkpoint(checkpoint_id, path)
+        return {
+            'type': 'notebook',
+            'content': reads_base64(b64_content),
+        }
+
+    def get_file_checkpoint(self, checkpoint_id, path):
+        b64_content = self._get_checkpoint(checkpoint_id, path)
+        content, format = _decode_unknown_from_base64(path, b64_content)
+        return {
+            'type': 'file',
+            'content': content,
+            'format': format,
+        }
+
+    def list_checkpoints(self, path):
+        """Return a list of checkpoints for a given file"""
+        with self.engine.begin() as db:
+            return list_remote_checkpoints(db, self.user_id, path)
+
+    def rename_all_checkpoints(self, old_path, new_path):
+        """Rename all checkpoints for old_path to new_path."""
+        with self.engine.begin() as db:
+            return move_remote_checkpoints(
+                db,
+                self.user_id,
+                old_path,
+                new_path,
+            )
+
+    def delete_all_checkpoints(self, path):
+        """Delete all checkpoints for the given path."""
+        with self.engine.begin() as db:
+            delete_remote_checkpoints(db, self.user_id, path)
+
+    def purge_db(self):
+        """
+        Purge all database records for the current user.
+        """
+        with self.engine.begin() as db:
+            purge_remote_checkpoints(db, self.user_id)
+
+    def dump(self, contents_mgr):
+        """
+        Synchronize the state of our database with the specified
+        ContentsManager.
+
+        Gets the most recent checkpoint for each file and passes it to the
+        supplied ContentsManager to be saved.
+        """
+        with self.engine.begin() as db:
+            records = latest_remote_checkpoints(db, self.user_id)
+            for record in records:
+                path = record['path']
+                if not path.endswith('.ipynb'):
+                    self.log.warn('Ignoring non-notebook file: {}', path)
+                    continue
+                for dirname in prefix_dirs(path):
+                    contents_mgr.save(
+                        model={'type': 'directory'},
+                        path=dirname,
+                    )
+                contents_mgr.save(
+                    self.get_notebook_checkpoint(record['id'], path),
+                    path,
+                )
