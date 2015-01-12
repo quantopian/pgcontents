@@ -17,12 +17,6 @@ pyzmq==14.4.1
 tornado==4.0.2
 wmctrl==0.1
 wsgiref==0.1.2
-flake8==2.2.5
 requests==2.5.0
 six==1.8.0
 click==3.3
-
-# Test reqs.
-nose==1.3.4
-python-dateutil
-nose-ignore-docstring
