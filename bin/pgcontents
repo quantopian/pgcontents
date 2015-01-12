@@ -63,7 +63,9 @@ _users = click.option(
 
 CONFIRM_MIGRATION = dedent(
     """
-    About to run schema migrations against supplied database URL.
+    About to run schema migrations against supplied database URL.  If you have
+    stored data from a previous pgcontents installation, it may not be
+    correctly preserved.
 
     It is *HIGHLY* recommended that you back up stored data before proceeding.
 
@@ -71,7 +73,7 @@ CONFIRM_MIGRATION = dedent(
 )
 
 
-@main.command('upgrade')
+@main.command('init')
 @_db_url
 @click.option(
     '-r', '--revision',
@@ -84,16 +86,16 @@ CONFIRM_MIGRATION = dedent(
     default=True,
     help="If passed, don't prompt for confirmation before migrating DB.",
 )
-def migrate(db_url, revision, prompt):
+def init(db_url, revision, prompt):
     """
     Migrate a database to the current pgcontents schema.
     """
-    click.echo("Updating pgcontents...")
+    click.echo("Initializing pgcontents...")
     if prompt:
         click.confirm(CONFIRM_MIGRATION, abort=True)
         upgrade(db_url, revision)
 
-    click.echo('Update completed successfully.')
+    click.echo('Initialization completed successfully.')
 
 
 @main.command()
