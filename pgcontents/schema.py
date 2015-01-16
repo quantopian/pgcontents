@@ -33,7 +33,7 @@ metadata = MetaData()
 
 # Shared Types
 UserID = Unicode(30)
-FilePath = Unicode(70)
+FilePath = Unicode(300)
 
 users = Table(
     'users',
@@ -119,7 +119,7 @@ files = Table(
     'files',
     metadata,
     Column('id', Integer(), nullable=False, primary_key=True),
-    Column('name', Unicode(40), nullable=False),
+    Column('name', FilePath, nullable=False),
     Column(
         'user_id',
         UserID,
