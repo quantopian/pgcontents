@@ -13,6 +13,17 @@ from IPython.html.services.contents.filemanager import FileContentsManager
 from ..checkpoints import PostgresCheckpoints
 
 
+def create_user(db_url, user):
+    """
+    Create a user.
+    """
+    cp_mgr = PostgresCheckpoints(
+        db_url=db_url,
+        user_id=user,
+        create_user_on_startup=True,
+    )
+
+
 def download_checkpoints(db_url, directory, user):
     """
     Download users' most recent checkpoints to the given directory.
