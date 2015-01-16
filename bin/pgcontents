@@ -99,6 +99,7 @@ def init(db_url, revision, prompt):
 
 
 @main.command()
+@_db_url
 def gen_migration(db_url):
     """
     Use alembic revision --autogenerate to create a new migration from
