@@ -36,7 +36,7 @@ def main():
 
 # Options
 _db_url = click.option(
-    '-u', '--db-url',
+    '-l', '--db-url',
     type=click.STRING,
     help='SQLAlchemy connection string for database.',
     envvar=DB_URL_ENVVAR,
