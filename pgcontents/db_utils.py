@@ -17,7 +17,7 @@ Utilities for working with databases.
 """
 
 from contextlib import contextmanager
-from itertools import izip
+from six.moves import zip
 
 from psycopg2.errorcodes import UNIQUE_VIOLATION
 from sqlalchemy import Column
@@ -55,5 +55,5 @@ def to_dict(fields, row):
     assert(len(fields) == len(row))
     return {
         _get_name(field): value
-        for field, value in izip(fields, row)
+        for field, value in zip(fields, row)
     }
