@@ -12,7 +12,6 @@ from sqlalchemy import (
     func,
     null,
     select,
-    text,
     Unicode,
 )
 
@@ -37,7 +36,6 @@ from .error import (
     NoSuchFile,
 )
 from .schema import(
-    checkpoints,
     directories,
     files,
     remote_checkpoints,
@@ -133,8 +131,6 @@ def _directory_default_fields():
 def delete_directory(db, user_id, api_path):
     """
     Delete a directory.
-
-    TODO: Consider making this a soft delete.
     """
     db_dirname = from_api_dirname(api_path)
     try:
@@ -381,8 +377,8 @@ def rename_file(db, user_id, old_api_path, new_api_path):
 
     db.execute(
         files.update().where(
-            (files.c.user_id == user_id)
-            & (files.c.parent_name == new_dir)
+            (files.c.user_id == user_id) &
+            (files.c.parent_name == new_dir)
         ).values(
             name=new_name,
         )
@@ -412,131 +408,6 @@ def save_file(db, user_id, path, content, max_size_bytes):
         )
     )
     return res
-
-
-# ===========
-# Checkpoints
-# ===========
-def _checkpoint_default_fields():
-    return checkpoints.c.id, checkpoints.c.created_at
-
-
-def _get_checkpoints(db, user_id, api_path, limit=None):
-    """
-    Get checkpoints from the database.
-    """
-    raise NotImplementedError()
-    query_fields = _checkpoint_default_fields()
-    query = select(
-        query_fields,
-    ).where(
-        _file_where(user_id, api_path),
-    ).order_by(
-        desc(files.c.created_at)
-    )
-    if limit is not None:
-        query = query.limit(limit)
-
-    results = [to_dict(query_fields, record) for record in db.execute(query)]
-    if not results:
-        raise NoSuchFile(api_path)
-
-    return results
-
-
-def create_checkpoint(db, user_id, api_path):
-    """
-    Create a checkpoint.
-    """
-    latest_version = _select_file(
-        user_id,
-        api_path,
-        [files.c.id],
-        limit=1,
-    )
-
-    return_fields = _checkpoint_default_fields()
-    query = checkpoints.insert().values(
-        file_id=latest_version,
-    ).returning(
-        *return_fields
-    )
-    results = [to_dict(return_fields, record) for record in db.execute(query)]
-    if not results:
-        raise NoSuchFile(api_path)
-    assert len(results) == 1
-    return results[0]
-
-
-def list_checkpoints(db, user_id, api_path):
-    """
-    Get all checkpoints for an api_path.
-    """
-    query_fields = _checkpoint_default_fields()
-    query = _select_file(
-        user_id,
-        api_path,
-        query_fields,
-        limit=None,
-    ).select_from(
-        files.join(
-            checkpoints,
-            files.c.id == checkpoints.c.file_id,
-        )
-    )
-    results = [to_dict(query_fields, record) for record in db.execute(query)]
-    return results
-
-
-def restore_checkpoint(db, user_id, api_path, checkpoint_id):
-    """
-    Restore a checkpoint by bumping its file's created_at date to now.
-    """
-    query = files.update().where(
-        checkpoints.c.id == checkpoint_id
-    ).where(
-        files.c.id == checkpoints.c.file_id,
-    ).where(
-        _file_where(user_id, api_path),
-    ).values(
-        created_at=func.now(),
-    )
-    result = db.execute(
-        query,
-    )
-    if not result.rowcount:
-        raise NoSuchFile()
-
-
-def delete_checkpoint(db, user_id, api_path, checkpoint_id):
-    """
-    Delete a checkpoint.
-    """
-    # We do this manually because SQLAlchemy doesn't support DELETE FROM USING.
-    # See https://bitbucket.org/zzzeek/sqlalchemy/issue/959.
-    querytext = text(
-        """
-        DELETE FROM checkpoints
-        USING files
-        WHERE
-            (files.user_id = :user_id) AND
-            (files.name = :name) AND
-            (files.parent_name = :parent_name) AND
-            (checkpoints.id = :checkpoint_id) AND
-            (checkpoints.file_id = files.id)
-        """
-    )
-    directory, name = split_api_filepath(api_path)
-    result = db.execute(
-        querytext,
-        user_id=user_id,
-        name=name,
-        parent_name=directory,
-        checkpoint_id=checkpoint_id,
-    )
-
-    if not result.rowcount:
-        raise NoSuchFile()
 
 
 # =======================================

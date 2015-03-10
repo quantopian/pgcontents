@@ -89,10 +89,10 @@ def walk(mgr):
     Takes a ContentsManager and returns a generator of tuples of the form:
     (directory name, [subdirectories], [files in directory])
     """
-    return _walk(mgr, [''])
+    return walk_dirs(mgr, [''])
 
 
-def _walk(mgr, dirs):
+def walk_dirs(mgr, dirs):
     """
     Recursive helper for walk.
     """
@@ -105,5 +105,5 @@ def _walk(mgr, dirs):
         dirs, files = map(sorted, _separate_dirs_files(children))
         yield directory, dirs, files
         if dirs:
-            for entry in _walk(mgr, dirs):
+            for entry in walk_dirs(mgr, dirs):
                 yield entry

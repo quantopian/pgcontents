@@ -8,6 +8,15 @@ from itertools import starmap
 import posixpath
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import reflection
+from sqlalchemy.schema import (
+    MetaData,
+    Table,
+    DropSchema,
+    DropTable,
+    ForeignKeyConstraint,
+    DropConstraint,
+)
 from IPython.nbformat.v4.nbbase import (
     new_code_cell,
     new_markdown_cell,
@@ -15,8 +24,8 @@ from IPython.nbformat.v4.nbbase import (
     new_raw_cell,
 )
 
+
 from ..api_utils import api_path_join
-from ..schema import metadata
 from ..utils.migrate import upgrade
 
 TEST_DB_URL = "postgresql://{user}@/pgcontents_testing".format(
@@ -29,8 +38,12 @@ def drop_testing_db_tables():
     Drop all tables from the testing db.
     """
     engine = create_engine(TEST_DB_URL)
-    metadata.drop_all(bind=engine)
-    engine.execute('DROP TABLE IF EXISTS alembic_version;')
+    conn = engine.connect()
+    trans = conn.begin()
+    conn.execute('DROP SCHEMA IF EXISTS pgcontents CASCADE')
+    conn.execute('DROP TABLE IF EXISTS alembic_version CASCADE')
+
+    trans.commit()
 
 
 def migrate_testing_db(revision='head'):

@@ -29,7 +29,7 @@ from sqlalchemy import (
     func,
 )
 
-metadata = MetaData()
+metadata = MetaData(schema='pgcontents')
 
 # Shared Types
 UserID = Unicode(30)
@@ -136,27 +136,8 @@ files = Table(
     ),
     ForeignKeyConstraint(
         ['user_id', 'parent_name'],
-        ['directories.user_id', 'directories.name'],
+        [directories.c.user_id, directories.c.name],
     ),
-)
-
-
-checkpoints = Table(
-    'checkpoints',
-    metadata,
-    Column('id', Integer(), nullable=False, primary_key=True),
-    Column(
-        'file_id',
-        Integer(),
-        ForeignKey(
-            files.c.id,
-            # Delete checkpoint entries when referenced files are deleted.
-            onupdate='CASCADE',
-            ondelete='CASCADE',
-        ),
-        nullable=False,
-    ),
-    Column('created_at', DateTime, default=func.now(), nullable=False),
 )
 
 

@@ -23,22 +23,30 @@ from IPython.html.services.contents.tests.test_manager import TestContentsManage
 from tornado.web import HTTPError
 
 from ..pgmanager import PostgresContentsManager
-from .utils import TEST_DB_URL
+from .utils import (
+    drop_testing_db_tables,
+    migrate_testing_db,
+    TEST_DB_URL,
+)
 
 
 class PostgresContentsManagerTestCase(TestContentsManager):
 
     def setUp(self):
+
+        drop_testing_db_tables()
+        migrate_testing_db()
+
         self.contents_manager = PostgresContentsManager(
             user_id='test',
             db_url=TEST_DB_URL,
         )
-        self.contents_manager.purge_db()
         self.contents_manager.ensure_user()
         self.contents_manager.ensure_root_directory()
 
     def tearDown(self):
-        self.contents_manager.purge_db()
+        drop_testing_db_tables()
+        migrate_testing_db()
 
     def make_dir(self, api_path):
         self.contents_manager.new(
@@ -77,6 +85,24 @@ class PostgresContentsManagerTestCase(TestContentsManager):
             )
         err = ctx.exception
         self.assertEqual(err.status_code, 413)
+
+    def test_escape_root(self):
+        cm = self.contents_manager
+        with self.assertRaisesHTTPError(404):
+            cm.get('..')
+        with self.assertRaisesHTTPError(404):
+            cm.get('foo/../../../bar')
+        with self.assertRaisesHTTPError(404):
+            cm.delete('../foo')
+        with self.assertRaisesHTTPError(404):
+            cm.rename('../foo', '../bar')
+        with self.assertRaisesHTTPError(404):
+            cm.save(model={
+                'type': 'file',
+                'content': u'',
+                'format': 'text',
+            }, path='../foo')
+
 
 
 # This needs to be removed or else we'll run the main IPython tests as well.

@@ -23,6 +23,8 @@ from base64 import (
 from dateutil.parser import parse
 
 from IPython.config import Config
+from IPython.html.services.contents.filecheckpoints import \
+    GenericFileCheckpoints
 from IPython.html.services.contents.tests.test_contents_api import APITest
 
 from ..constants import UNLIMITED
@@ -33,15 +35,17 @@ from ..pgmanager import (
 from ..checkpoints import PostgresCheckpoints
 from ..query import (
     create_directory,
+    delete_directory,
+    delete_file,
     dir_exists,
     file_exists,
     save_file,
 )
 from .utils import TEST_DB_URL
-from ..utils.sync import walk
+from ..utils.sync import walk, walk_dirs
 
 
-class PGContentsAPITestBase(APITest):
+class _APITestBase(APITest):
     """
     APITest that also runs a test for our implementation of `walk`.
     """
@@ -142,7 +146,7 @@ class PGContentsAPITestBase(APITest):
         )
 
 
-class PostgresContentsAPITest(PGContentsAPITestBase):
+class PostgresContentsAPITest(_APITestBase):
 
     config = Config()
     config.NotebookApp.contents_manager_class = PostgresContentsManager
@@ -187,12 +191,23 @@ class PostgresContentsAPITest(PGContentsAPITestBase):
         with self.engine.begin() as db:
             save_file(db, self.user_id, api_path, writes_base64(nb), UNLIMITED)
 
-    # TODO: Use these rather than relying on `purge_db`.
-    def delete_dir(self, api_path):
-        raise NotImplementedError()
+    def delete_dir(self, api_path, db=None):
+        if self.isdir(api_path):
+            dirs, files = [], []
+            for dir_, _, fs in walk_dirs(self.contents_manager, [api_path]):
+                dirs.append(dir_)
+                files.extend(fs)
+
+            with self.engine.begin() as db:
+                for file_ in files:
+                    delete_file(db, self.user_id, file_)
+                for dir_ in reversed(dirs):
+                    delete_directory(db, self.user_id, dir_)
 
     def delete_file(self, api_path):
-        raise NotImplementedError()
+        if self.isfile(api_path):
+            with self.engine.begin() as db:
+                delete_file(db, self.user_id, api_path)
 
     def isfile(self, api_path):
         with self.engine.begin() as db:
@@ -202,14 +217,6 @@ class PostgresContentsAPITest(PGContentsAPITestBase):
         with self.engine.begin() as db:
             return dir_exists(db, self.user_id, api_path)
 
-    def setUp(self):
-        self.contents_manager.purge_db()
-        self.contents_manager.ensure_user()
-        self.contents_manager.ensure_root_directory()
-        super(PostgresContentsAPITest, self).setUp()
-
-    def tearDown(self):
-        self.contents_manager.purge_db()
     # End superclass method overrides.
 
     # Test overrides.
@@ -223,14 +230,25 @@ class PostgresContentsAPITest(PGContentsAPITestBase):
         pass
 
 
-class PostgresCheckpointsAPITest(PGContentsAPITestBase):
+class PostgresContentsFileCheckpointsAPITest(PostgresContentsAPITest):
+
+    config = Config()
+    config.NotebookApp.contents_manager_class = PostgresContentsManager
+    config.PostgresContentsManager.checkpoints_class = GenericFileCheckpoints
+    config.PostgresContentsManager.user_id = 'test'
+    config.PostgresContentsManager.db_url = TEST_DB_URL
+
+    # Don't support hidden directories.
+    hidden_dirs = []
+
+
+class PostgresCheckpointsAPITest(_APITestBase):
     """
-    Test using PostgresCheckpoints with the built-in
-    PostgresContentsManager.
+    Test using PostgresCheckpoints with the built-in FileContentsManager.
     """
 
     config = Config()
-    config.FileContentsManager.checkpoints_class = PostgresCheckpoints
+    config.ContentsManager.checkpoints_class = PostgresCheckpoints
     config.PostgresCheckpoints.user_id = 'test'
     config.PostgresCheckpoints.db_url = TEST_DB_URL
 
@@ -246,6 +264,9 @@ class PostgresCheckpointsAPITest(PGContentsAPITestBase):
     def tearDown(self):
         super(PostgresCheckpointsAPITest, self).tearDown()
         self.checkpoints.purge_db()
+
+    def test_pgcheckpoints_is_used(self):
+        self.assertIsInstance(self.checkpoints, PostgresCheckpoints)
 
     def test_checkpoints_separate_root(self):
         pass

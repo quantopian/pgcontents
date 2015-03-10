@@ -27,7 +27,6 @@ from IPython.utils.traitlets import (
     Integer,
 )
 from IPython.html.services.contents.manager import ContentsManager
-from six import text_type
 from tornado import web
 
 from .api_utils import (
@@ -37,6 +36,7 @@ from .api_utils import (
     from_b64,
     to_b64,
 )
+from .checkpoints import PostgresCheckpoints
 from .constants import UNLIMITED
 from .error import (
     DirectoryNotEmpty,
@@ -47,18 +47,14 @@ from .error import (
 )
 from .managerbase import PostgresManagerMixin
 from .query import (
-    create_checkpoint,
-    delete_checkpoint,
     delete_file,
     delete_directory,
     dir_exists,
     ensure_directory,
     get_directory,
     get_file,
-    list_checkpoints,
     purge_user,
     rename_file,
-    restore_checkpoint,
     save_file,
 )
 
@@ -82,6 +78,20 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         config=True,
         help="Create a user for user_id automatically?",
     )
+
+    def _checkpoints_class_default(self):
+        return PostgresCheckpoints
+
+    def _checkpoints_kwargs_default(self):
+        kw = super(PostgresContentsManager, self)._checkpoints_kwargs_default()
+        kw.update(
+            {
+                'db_url': self.db_url,
+                'user_id': self.user_id,
+                'create_user_on_startup': self.create_user_on_startup,
+            }
+        )
+        return kw
 
     def _create_directory_on_startup_default(self):
         return self.create_user_on_startup
@@ -147,14 +157,14 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     def get(self, path, content=True, type=None, format=None):
         if type is None:
             type = self.guess_type(path)
-        if type == "notebook":
-            return self._get_notebook(path, content, format)
-        elif type == "directory":
-            return self._get_directory(path, content, format)
-        elif type == "file":
-            return self._get_file(path, content, format)
-        else:
-            raise ValueError("Unknown type passed: {}".format(type))
+        try:
+            return {
+                'notebook': self._get_notebook,
+                'directory': self._get_directory,
+                'file': self._get_file,
+            }[type](path=path, content=content, format=format)
+        except KeyError:
+            raise ValueError("Unknown type passed: '{}'".format(type))
 
     def _get_notebook(self, path, content, format):
         """
@@ -203,6 +213,20 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
 
         return self._directory_model_from_db(record, content)
 
+    def _convert_file_records(self, file_records):
+        """
+        Apply _notebook_model_from_db or _file_model_from_db to each entry
+        in file_records, depending on the result of `guess_type`.
+        """
+        for record in file_records:
+            type_ = self.guess_type(record['name'])
+            if type_ == 'notebook':
+                yield self._notebook_model_from_db(record, False)
+            elif type_ == 'file':
+                yield self._file_model_from_db(record, False, None)
+            else:
+                self.do_500("Unknown file type %s" % type_)
+
     def _directory_model_from_db(self, record, content):
         """
         Build a directory model from database directory record.
@@ -226,33 +250,6 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             )
         return model
 
-    def _convert_file_records(self, file_records):
-        """
-        Apply _notebook_model_from_db or _file_model_from_db to each entry
-        in file_records, depending on the result of `guess_type`.
-        """
-        for record in file_records:
-            type_ = self.guess_type(record['name'])
-            if type_ == 'notebook':
-                yield self._notebook_model_from_db(record, False)
-            elif type_ == 'file':
-                yield self._file_model_from_db(record, False, None)
-            else:
-                self.do_500("Unknown file type %s" % type_)
-
-    def _get_file(self, path, content, format):
-        with self.engine.begin() as db:
-            try:
-                record = get_file(db, self.user_id, path, content)
-            except NoSuchFile:
-                if self.dir_exists(path):
-                    # TODO: It's awkward/expensive to have to check this to
-                    # return a 400 instead of 404. Consider just 404ing.
-                    self.do_400(u"Wrong type: %s" % path)
-                else:
-                    self.no_such_entity(path)
-        return self._file_model_from_db(record, content, format)
-
     def _file_model_from_db(self, record, content, format):
         """
         Build a file model from database record.
@@ -271,42 +268,18 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             )
         return model
 
-    def save(self, model, path):
-        if 'type' not in model:
-            raise web.HTTPError(400, u'No file type provided')
-        if 'content' not in model and model['type'] != 'directory':
-            raise web.HTTPError(400, u'No file content provided')
-
-        path = path.strip('/')
-
-        # Almost all of this is duplicated with FileContentsManager :(.
-        self.log.debug("Saving %s", path)
-        if model['type'] not in ('file', 'directory', 'notebook'):
-            self.do_400("Unhandled contents type: %s" % model['type'])
-        try:
-            with self.engine.begin() as db:
-                if model['type'] == 'notebook':
-                    validation_message = self._save_notebook(db, model, path)
-                elif model['type'] == 'file':
-                    validation_message = self._save_file(db, model, path)
+    def _get_file(self, path, content, format):
+        with self.engine.begin() as db:
+            try:
+                record = get_file(db, self.user_id, path, content)
+            except NoSuchFile:
+                if self.dir_exists(path):
+                    # TODO: It's awkward/expensive to have to check this to
+                    # return a 400 instead of 404. Consider just 404ing.
+                    self.do_400(u"Wrong type: %s" % path)
                 else:
-                    validation_message = self._save_directory(db, path)
-        except web.HTTPError:
-            raise
-        except FileTooLarge:
-            self.file_too_large(path)
-        except Exception as e:
-            self.log.error(u'Error while saving file: %s %s',
-                           path, e, exc_info=True)
-            self.do_500(
-                u'Unexpected error while saving file: %s %s' % (path, e)
-            )
-
-        # TODO: Consider not round-tripping to the database again here.
-        model = self.get(path, type=model['type'], content=False)
-        if validation_message is not None:
-            model['message'] = validation_message
-        return model
+                    self.no_such_entity(path)
+        return self._file_model_from_db(record, content, format)
 
     def _save_notebook(self, db, model, path):
         """
@@ -346,19 +319,41 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         """
         ensure_directory(db, self.user_id, path)
 
-    def update(self, model, path):
-        """
-        Update the file's path
+    def save(self, model, path):
+        if 'type' not in model:
+            raise web.HTTPError(400, u'No file type provided')
+        if 'content' not in model and model['type'] != 'directory':
+            raise web.HTTPError(400, u'No file content provided')
 
-        For use in PATCH requests, to enable renaming a file without
-        re-uploading its contents. Only used for renaming at the moment.
-        """
-        # NOTE: This implementation is identical to the one in
-        # FileContentsManager.
-        new_path = model.get('path', path)
-        if path != new_path:
-            self.rename(path, new_path)
-        model = self.get(new_path, content=False)
+        path = path.strip('/')
+
+        # Almost all of this is duplicated with FileContentsManager :(.
+        self.log.debug("Saving %s", path)
+        if model['type'] not in ('file', 'directory', 'notebook'):
+            self.do_400("Unhandled contents type: %s" % model['type'])
+        try:
+            with self.engine.begin() as db:
+                if model['type'] == 'notebook':
+                    validation_message = self._save_notebook(db, model, path)
+                elif model['type'] == 'file':
+                    validation_message = self._save_file(db, model, path)
+                else:
+                    validation_message = self._save_directory(db, path)
+        except web.HTTPError:
+            raise
+        except FileTooLarge:
+            self.file_too_large(path)
+        except Exception as e:
+            self.log.error(u'Error while saving file: %s %s',
+                           path, e, exc_info=True)
+            self.do_500(
+                u'Unexpected error while saving file: %s %s' % (path, e)
+            )
+
+        # TODO: Consider not round-tripping to the database again here.
+        model = self.get(path, type=model['type'], content=False)
+        if validation_message is not None:
+            model['message'] = validation_message
         return model
 
     def rename(self, old_path, path):
@@ -370,17 +365,6 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
                 rename_file(db, self.user_id, old_path, path)
             except FileExists:
                 self.already_exists(path)
-
-    def delete(self, path):
-        """
-        Delete file at path.
-        """
-        if self.file_exists(path):
-            self._delete_file(path)
-        elif self.dir_exists(path):
-            self._delete_directory(path)
-        else:
-            self.no_such_entity(path)
 
     def _delete_file(self, path):
         with self.engine.begin() as db:
@@ -397,60 +381,13 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             if not deleted_count:
                 self.no_such_entity(path)
 
-    def create_checkpoint(self, path):
+    def delete(self, path):
         """
-        Create a checkpoint.
+        Delete file at path.
         """
-        with self.engine.begin() as db:
-            try:
-                record = create_checkpoint(db, self.user_id, path)
-            except NoSuchFile:
-                self.no_such_entity(path)
-        return self._checkpoint_from_record(record)
-
-    def _checkpoint_from_record(self, record):
-        """
-        Convert a database record to a checkpoint.
-        """
-        return {
-            'id': text_type(record['id']),
-            'last_modified': record['created_at'],
-        }
-
-    def list_checkpoints(self, path):
-        """
-        List checkpoints.
-        """
-        with self.engine.begin() as db:
-            try:
-                records = list_checkpoints(db, self.user_id, path)
-            except NoSuchFile:
-                self.no_such_entity(path)
-
-        return [self._checkpoint_from_record(record) for record in records]
-
-    def restore_checkpoint(self, checkpoint_id, path):
-        """
-        Restore a checkpoint.
-        """
-        with self.engine.begin() as db:
-            try:
-                restore_checkpoint(db, self.user_id, path, checkpoint_id)
-            except NoSuchFile:
-                self.no_such_entity(
-                    "Path: {path}, Checkpoint: {checkpoint_id}".format(
-                        path=path, checkpoint_id=checkpoint_id,
-                    )
-                )
-
-    def delete_checkpoint(self, checkpoint_id, path):
-        with self.engine.begin() as db:
-            try:
-                delete_checkpoint(db, self.user_id, path, checkpoint_id)
-            except NoSuchFile:
-                self.no_such_entity(
-                    "Path: {path}, Checkpoint: {checkpoint_id}".format(
-                        path=path, checkpoint_id=checkpoint_id,
-                    )
-                )
-    # End ContentsManager API.
+        if self.file_exists(path):
+            self._delete_file(path)
+        elif self.dir_exists(path):
+            self._delete_directory(path)
+        else:
+            self.no_such_entity(path)
