@@ -17,7 +17,7 @@ def create_user(db_url, user):
     """
     Create a user.
     """
-    cp_mgr = PostgresCheckpoints(
+    PostgresCheckpoints(
         db_url=db_url,
         user_id=user,
         create_user_on_startup=True,
