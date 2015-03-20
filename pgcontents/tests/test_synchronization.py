@@ -11,7 +11,12 @@ from IPython.html.services.contents.filemanager import FileContentsManager
 from six import iteritems
 
 from ..checkpoints import PostgresCheckpoints
-from .utils import populate, TEST_DB_URL
+from .utils import (
+    drop_testing_db_tables,
+    migrate_testing_db,
+    populate,
+    TEST_DB_URL,
+)
 from ..utils.sync import (
     checkpoint_all,
     download_checkpoints,
@@ -21,6 +26,10 @@ from ..utils.sync import (
 class TestUploadDownload(TestCase):
 
     def setUp(self):
+
+        drop_testing_db_tables()
+        migrate_testing_db()
+
         self.td = TemporaryDirectory()
         self.checkpoints = PostgresCheckpoints(
             user_id='test',
@@ -31,12 +40,10 @@ class TestUploadDownload(TestCase):
             checkpoints=self.checkpoints,
         )
 
-        self.checkpoints.purge_db()
         self.checkpoints.ensure_user()
 
     def tearDown(self):
         self.td.cleanup()
-        self.checkpoints.purge_db()
 
     def add_markdown_cell(self, path):
         # Load and update
