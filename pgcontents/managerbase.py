@@ -58,14 +58,6 @@ class PostgresManagerMixin(HasTraits):
         with self.engine.begin() as db:
             ensure_db_user(db, self.user_id)
 
-    def purge_db(self):
-        """
-        Remove all records associated with our user_id.
-
-        Must be implemented by subclasses.
-        """
-        raise NotImplementedError()
-
     def no_such_entity(self, path):
         self.do_404(
             u"No such entity: [{path}]".format(path=path)
