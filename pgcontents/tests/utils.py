@@ -8,15 +8,6 @@ from itertools import starmap
 import posixpath
 
 from sqlalchemy import create_engine
-from sqlalchemy.engine import reflection
-from sqlalchemy.schema import (
-    MetaData,
-    Table,
-    DropSchema,
-    DropTable,
-    ForeignKeyConstraint,
-    DropConstraint,
-)
 from IPython.nbformat.v4.nbbase import (
     new_code_cell,
     new_markdown_cell,
