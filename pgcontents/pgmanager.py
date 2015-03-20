@@ -158,13 +158,14 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         if type is None:
             type = self.guess_type(path)
         try:
-            return {
+            fn = {
                 'notebook': self._get_notebook,
                 'directory': self._get_directory,
                 'file': self._get_file,
-            }[type](path=path, content=content, format=format)
+            }[type]
         except KeyError:
             raise ValueError("Unknown type passed: '{}'".format(type))
+        return fn(path=path, content=content, format=format)
 
     def _get_notebook(self, path, content, format):
         """
