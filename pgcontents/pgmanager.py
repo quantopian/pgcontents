@@ -30,11 +30,12 @@ from IPython.html.services.contents.manager import ContentsManager
 from tornado import web
 
 from .api_utils import (
-    to_api_path,
-    writes_base64,
-    reads_base64,
     from_b64,
+    outside_root_to_404,
+    reads_base64,
+    to_api_path,
     to_b64,
+    writes_base64,
 )
 from .checkpoints import PostgresCheckpoints
 from .constants import UNLIMITED
@@ -44,6 +45,7 @@ from .error import (
     FileTooLarge,
     NoSuchDirectory,
     NoSuchFile,
+    PathOutsideRoot,
 )
 from .managerbase import PostgresManagerMixin
 from .query import (
@@ -139,6 +141,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             return 'file'
 
     # Begin ContentsManager API.
+    @outside_root_to_404
     def dir_exists(self, path):
         with self.engine.begin() as db:
             return dir_exists(db, self.user_id, path)
@@ -146,6 +149,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     def is_hidden(self, path):
         return False
 
+    @outside_root_to_404
     def file_exists(self, path):
         with self.engine.begin() as db:
             try:
@@ -154,6 +158,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             except NoSuchFile:
                 return False
 
+    @outside_root_to_404
     def get(self, path, content=True, type=None, format=None):
         if type is None:
             type = self.guess_type(path)
@@ -320,6 +325,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         """
         ensure_directory(db, self.user_id, path)
 
+    @outside_root_to_404
     def save(self, model, path):
         if 'type' not in model:
             raise web.HTTPError(400, u'No file type provided')
@@ -340,7 +346,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
                     validation_message = self._save_file(db, model, path)
                 else:
                     validation_message = self._save_directory(db, path)
-        except web.HTTPError:
+        except (web.HTTPError, PathOutsideRoot):
             raise
         except FileTooLarge:
             self.file_too_large(path)
@@ -357,6 +363,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             model['message'] = validation_message
         return model
 
+    @outside_root_to_404
     def rename(self, old_path, path):
         """
         Rename a file.
@@ -382,6 +389,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             if not deleted_count:
                 self.no_such_entity(path)
 
+    @outside_root_to_404
     def delete(self, path):
         """
         Delete file at path.

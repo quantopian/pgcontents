@@ -18,6 +18,7 @@ Run IPython's TestContentsManager using PostgresContentsManager.
 from __future__ import unicode_literals
 
 from base64 import b64encode
+from contextlib import contextmanager
 
 from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
 from tornado.web import HTTPError
@@ -47,6 +48,16 @@ class PostgresContentsManagerTestCase(TestContentsManager):
     def tearDown(self):
         drop_testing_db_tables()
         migrate_testing_db()
+
+    @contextmanager
+    def assertRaisesHTTPError(self, status, msg=None):
+        msg = msg or "Should have raised HTTPError(%i)" % status
+        try:
+            yield
+        except HTTPError as e:
+            self.assertEqual(e.status_code, status)
+        else:
+            self.fail(msg)
 
     def make_dir(self, api_path):
         self.contents_manager.new(
@@ -86,8 +97,13 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         err = ctx.exception
         self.assertEqual(err.status_code, 413)
 
-    def test_escape_root(self):
+    def test_relative_paths(self):
         cm = self.contents_manager
+
+        nb, name, path = self.new_notebook()
+        self.assertEqual(cm.get(path), cm.get('/a/../' + path))
+        self.assertEqual(cm.get(path), cm.get('/a/../b/c/../../' + path))
+
         with self.assertRaisesHTTPError(404):
             cm.get('..')
         with self.assertRaisesHTTPError(404):
@@ -102,7 +118,6 @@ class PostgresContentsManagerTestCase(TestContentsManager):
                 'content': u'',
                 'format': 'text',
             }, path='../foo')
-
 
 
 # This needs to be removed or else we'll run the main IPython tests as well.

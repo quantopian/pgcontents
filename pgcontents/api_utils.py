@@ -6,6 +6,7 @@ from base64 import (
     b64decode,
     b64encode,
 )
+from functools import wraps
 import mimetypes
 import posixpath
 
@@ -14,6 +15,7 @@ from IPython.nbformat import (
     writes,
 )
 from tornado.web import HTTPError
+from .error import PathOutsideRoot
 
 NBFORMAT_VERSION = 4
 
@@ -25,20 +27,29 @@ def api_path_join(*paths):
     return posixpath.join(*paths).strip('/')
 
 
+def normalize_api_path(api_path):
+    """
+    Resolve paths with '..' to normalized paths, raising an error if the final
+    result is outside root.
+    """
+    normalized = posixpath.normpath(api_path)
+    if normalized == '.':
+        normalized = '/'
+    elif normalized.startswith('..'):
+        raise PathOutsideRoot(normalized)
+    return normalized
+
+
 def from_api_dirname(api_dirname):
     """
-    Convert API-style directory name into the format stored in the database.
-
-    TODO: Consider implementgin this with a SQLAlchemy TypeDecorator.
+    Convert API-style directory name into a db-style directory name.
     """
-    # Special case for root directory.
-    if api_dirname == '':
-        return '/'
+    normalized = normalize_api_path(api_dirname)
     return ''.join(
         [
-            '' if api_dirname.startswith('/') else '/',
-            api_dirname,
-            '' if api_dirname.endswith('/') else '/',
+            '' if normalized.startswith("/") else '/',
+            normalized,
+            '' if normalized.endswith('/') else '/',
         ]
     )
 
@@ -48,10 +59,11 @@ def from_api_filename(api_path):
     Convert an API-style path into a db-style path.
     """
     assert len(api_path.strip('/')) > 0
+    normalized = normalize_api_path(api_path)
     return ''.join(
         [
-            '' if api_path.startswith('/') else '/',
-            api_path,
+            '' if normalized.startswith('/') else '/',
+            normalized,
         ]
     )
 
@@ -59,8 +71,6 @@ def from_api_filename(api_path):
 def to_api_path(db_path):
     """
     Convert database path into API-style path.
-
-    TODO: Consider implementing this with a SQLAlchemy TypeDecorator.
     """
     return db_path.strip('/')
 
@@ -171,3 +181,16 @@ def prefix_dirs(path):
     while path != '':
         path = _dirname(path)
         yield path
+
+
+def outside_root_to_404(fn):
+    """
+    Decorator for converting PathOutsideRoot errors to 404s.
+    """
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except PathOutsideRoot as e:
+            raise HTTPError(404, "Path outside root: [%s]" % e.args[0])
+    return wrapped

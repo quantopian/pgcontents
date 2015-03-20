@@ -34,6 +34,7 @@ from .error import (
     NoSuchCheckpoint,
     NoSuchDirectory,
     NoSuchFile,
+    PathOutsideRoot,
 )
 from .schema import(
     directories,

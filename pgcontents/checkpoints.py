@@ -10,6 +10,7 @@ from IPython.html.services.contents.manager import (
 
 from .api_utils import (
     _decode_unknown_from_base64,
+    outside_root_to_404,
     prefix_dirs,
     reads_base64,
     to_b64,
@@ -36,6 +37,7 @@ class PostgresCheckpoints(PostgresManagerMixin,
     A Checkpoints implementation that saves checkpoints to a remote database.
     """
 
+    @outside_root_to_404
     def create_notebook_checkpoint(self, nb, path):
         """Create a checkpoint of the current state of a notebook
 
@@ -45,6 +47,7 @@ class PostgresCheckpoints(PostgresManagerMixin,
         with self.engine.begin() as db:
             return save_remote_checkpoint(db, self.user_id, path, b64_content)
 
+    @outside_root_to_404
     def create_file_checkpoint(self, content, format, path):
         """Create a checkpoint of the current state of a file
 
@@ -57,6 +60,7 @@ class PostgresCheckpoints(PostgresManagerMixin,
         with self.engine.begin() as db:
             return save_remote_checkpoint(db, self.user_id, path, b64_content)
 
+    @outside_root_to_404
     def rename_checkpoint(self, checkpoint_id, old_path, new_path):
         """Rename a checkpoint from old_path to new_path."""
         with self.engine.begin() as db:
@@ -64,6 +68,7 @@ class PostgresCheckpoints(PostgresManagerMixin,
                 db, old_path, new_path, checkpoint_id,
             )
 
+    @outside_root_to_404
     def delete_checkpoint(self, checkpoint_id, path):
         """delete a checkpoint for a file"""
         with self.engine.begin() as db:
@@ -81,6 +86,7 @@ class PostgresCheckpoints(PostgresManagerMixin,
                 checkpoint_id,
             )['content']
 
+    @outside_root_to_404
     def get_notebook_checkpoint(self, checkpoint_id, path):
         b64_content = self._get_checkpoint(checkpoint_id, path)
         return {
@@ -88,6 +94,7 @@ class PostgresCheckpoints(PostgresManagerMixin,
             'content': reads_base64(b64_content),
         }
 
+    @outside_root_to_404
     def get_file_checkpoint(self, checkpoint_id, path):
         b64_content = self._get_checkpoint(checkpoint_id, path)
         content, format = _decode_unknown_from_base64(path, b64_content)
@@ -97,11 +104,13 @@ class PostgresCheckpoints(PostgresManagerMixin,
             'format': format,
         }
 
+    @outside_root_to_404
     def list_checkpoints(self, path):
         """Return a list of checkpoints for a given file"""
         with self.engine.begin() as db:
             return list_remote_checkpoints(db, self.user_id, path)
 
+    @outside_root_to_404
     def rename_all_checkpoints(self, old_path, new_path):
         """Rename all checkpoints for old_path to new_path."""
         with self.engine.begin() as db:
@@ -112,6 +121,7 @@ class PostgresCheckpoints(PostgresManagerMixin,
                 new_path,
             )
 
+    @outside_root_to_404
     def delete_all_checkpoints(self, path):
         """Delete all checkpoints for the given path."""
         with self.engine.begin() as db:

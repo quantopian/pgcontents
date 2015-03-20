@@ -11,6 +11,14 @@ class NoSuchFile(Exception):
     pass
 
 
+class NoSuchCheckpoint(Exception):
+    pass
+
+
+class PathOutsideRoot(Exception):
+    pass
+
+
 class FileExists(Exception):
     pass
 
@@ -20,8 +28,4 @@ class DirectoryNotEmpty(Exception):
 
 
 class FileTooLarge(Exception):
-    pass
-
-
-class NoSuchCheckpoint(Exception):
     pass
