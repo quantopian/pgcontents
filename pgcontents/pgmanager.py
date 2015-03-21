@@ -364,9 +364,9 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         return model
 
     @outside_root_to_404
-    def rename(self, old_path, path):
+    def rename_file(self, old_path, path):
         """
-        Rename a file.
+        Rename object from old_path to path.
         """
         with self.engine.begin() as db:
             try:
@@ -374,7 +374,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             except FileExists:
                 self.already_exists(path)
 
-    def _delete_file(self, path):
+    def _delete_non_directory(self, path):
         with self.engine.begin() as db:
             deleted_count = delete_file(db, self.user_id, path)
             if not deleted_count:
@@ -390,12 +390,12 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
                 self.no_such_entity(path)
 
     @outside_root_to_404
-    def delete(self, path):
+    def delete_file(self, path):
         """
-        Delete file at path.
+        Delete object corresponding to path.
         """
         if self.file_exists(path):
-            self._delete_file(path)
+            self._delete_non_directory(path)
         elif self.dir_exists(path):
             self._delete_directory(path)
         else:
