@@ -26,6 +26,7 @@ from IPython.config import Config
 from IPython.html.services.contents.filecheckpoints import \
     GenericFileCheckpoints
 from IPython.html.services.contents.tests.test_contents_api import APITest
+from IPython.utils.tempdir import TemporaryDirectory
 
 from ..constants import UNLIMITED
 from ..pgmanager import (
@@ -240,6 +241,17 @@ class PostgresContentsFileCheckpointsAPITest(PostgresContentsAPITest):
 
     # Don't support hidden directories.
     hidden_dirs = []
+
+    @classmethod
+    def setup_class(cls):
+        cls.td = TemporaryDirectory()
+        cls.config.GenericFileCheckpoints.root_dir = cls.td.name
+        super(PostgresContentsFileCheckpointsAPITest, cls).setup_class()
+
+    @classmethod
+    def teardown_class(cls):
+        super(PostgresContentsFileCheckpointsAPITest, cls).teardown_class()
+        cls.td.cleanup()
 
 
 class PostgresCheckpointsAPITest(_APITestBase):
