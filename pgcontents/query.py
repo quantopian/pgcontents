@@ -383,6 +383,7 @@ def rename_file(db, user_id, old_api_path, new_api_path):
             _file_where(user_id, old_api_path),
         ).values(
             name=new_name,
+            created_at=func.now(),
         )
     )
 
@@ -423,6 +424,7 @@ def save_file(db, user_id, path, content, max_size_bytes):
                         _file_where(user_id, path),
                     ).values(
                         content=content,
+                        created_at=func.now(),
                     )
                 )
             else:

@@ -65,6 +65,28 @@ class PostgresContentsManagerTestCase(TestContentsManager):
             path=api_path,
         )
 
+    def test_modified_date(self):
+
+        cm = self.contents_manager
+
+        # Create a new notebook.
+        nb, name, path = self.new_notebook()
+        model = cm.get(path)
+
+        # Add a cell and save.
+        self.add_code_cell(model['content'])
+        cm.save(model, path)
+
+        # Reload notebook and verify that last_modified incremented.
+        saved = cm.get(path)
+        self.assertGreater(saved['last_modified'], model['last_modified'])
+
+        # Move the notebook and verify that last_modified incremented.
+        new_path = 'renamed.ipynb'
+        cm.rename(path, new_path)
+        renamed = cm.get(new_path)
+        self.assertGreater(renamed['last_modified'], saved['last_modified'])
+
     def test_max_file_size(self):
         cm = self.contents_manager
         max_size = 68
