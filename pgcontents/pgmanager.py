@@ -129,13 +129,16 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             "mimetype": None,
         }
 
-    def guess_type(self, path):
+    def guess_type(self, path, allow_directory=True):
         """
         Guess the type of a file.
+
+        If allow_directory is False, don't consider the possibility that the
+        file is a directory.
         """
         if path.endswith('.ipynb'):
             return 'notebook'
-        elif self.dir_exists(path):
+        elif allow_directory and self.dir_exists(path):
             return 'directory'
         else:
             return 'file'
@@ -225,7 +228,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         in file_records, depending on the result of `guess_type`.
         """
         for record in file_records:
-            type_ = self.guess_type(record['name'])
+            type_ = self.guess_type(record['name'], allow_directory=False)
             if type_ == 'notebook':
                 yield self._notebook_model_from_db(record, False)
             elif type_ == 'file':
