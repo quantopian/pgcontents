@@ -3,7 +3,6 @@ Database Queries for PostgresContentsManager.
 """
 from textwrap import dedent
 
-from psycopg2.errorcodes import FOREIGN_KEY_VIOLATION
 from sqlalchemy import (
     and_,
     asc,
@@ -25,6 +24,8 @@ from .api_utils import (
 from .constants import UNLIMITED
 from .db_utils import (
     ignore_unique_violation,
+    is_unique_violation,
+    is_foreign_key_violation,
     to_dict,
 )
 from .error import (
@@ -34,7 +35,6 @@ from .error import (
     NoSuchCheckpoint,
     NoSuchDirectory,
     NoSuchFile,
-    PathOutsideRoot,
 )
 from .schema import(
     directories,
@@ -144,9 +144,10 @@ def delete_directory(db, user_id, api_path):
             )
         )
     except IntegrityError as error:
-        if error.orig.pgcode != FOREIGN_KEY_VIOLATION:
+        if is_foreign_key_violation(error):
+            raise DirectoryNotEmpty(api_path)
+        else:
             raise
-        raise DirectoryNotEmpty(api_path)
 
     rowcount = result.rowcount
     if not rowcount:
@@ -323,7 +324,6 @@ def delete_file(db, user_id, api_path):
 
     TODO: Consider making this a soft delete.
     """
-    directory, name = split_api_filepath(api_path)
     result = db.execute(
         files.delete().where(
             _file_where(user_id, api_path)
@@ -334,8 +334,6 @@ def delete_file(db, user_id, api_path):
     if not rowcount:
         raise NoSuchFile(api_path)
 
-    # TODO: This is misleading because we allow multiple files with the same
-    # user_id/name as checkpoints.  Consider de-duping this in some way?
     return rowcount
 
 
@@ -354,7 +352,6 @@ def rename_file(db, user_id, old_api_path, new_api_path):
     """
     Rename a file. The file must stay in the same directory.
 
-    TODO: Consider allowing renames to existing directories.
     TODO: Don't do anything if paths are the same.
     """
     old_dir, old_name = split_api_filepath(old_api_path)
@@ -373,13 +370,17 @@ def rename_file(db, user_id, old_api_path, new_api_path):
             )
         )
 
+    # Overwriting existing files is disallowed.
     if file_exists(db, user_id, new_api_path):
         raise FileExists(new_api_path)
 
+    # Only allow writes to extant directories.
+    if not _dir_exists(db, user_id, new_dir):
+        raise NoSuchDirectory(new_dir)
+
     db.execute(
         files.update().where(
-            (files.c.user_id == user_id) &
-            (files.c.parent_name == new_dir)
+            _file_where(user_id, old_api_path),
         ).values(
             name=new_name,
         )
@@ -397,17 +398,37 @@ def check_content(content, max_size_bytes):
 def save_file(db, user_id, path, content, max_size_bytes):
     """
     Save a file.
+
+    TODO: Update-then-insert is probably cheaper than insert-then-update.
     """
     check_content(content, max_size_bytes)
     directory, name = split_api_filepath(path)
-    res = db.execute(
-        files.insert().values(
-            name=name,
-            user_id=user_id,
-            parent_name=directory,
-            content=content,
-        )
-    )
+    with db.begin_nested() as savepoint:
+        try:
+            res = db.execute(
+                files.insert().values(
+                    name=name,
+                    user_id=user_id,
+                    parent_name=directory,
+                    content=content,
+                )
+            )
+        except IntegrityError as error:
+            # The file already exists, so overwrite its content with the newer
+            # version.
+            if is_unique_violation(error):
+                savepoint.rollback()
+                res = db.execute(
+                    files.update().where(
+                        _file_where(user_id, path),
+                    ).values(
+                        content=content,
+                    )
+                )
+            else:
+                # Unknown error.  Reraise
+                raise
+
     return res
 
 

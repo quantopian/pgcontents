@@ -19,18 +19,37 @@ Utilities for working with databases.
 from contextlib import contextmanager
 from six.moves import zip
 
-from psycopg2.errorcodes import UNIQUE_VIOLATION
+from psycopg2.errorcodes import (
+    FOREIGN_KEY_VIOLATION,
+    UNIQUE_VIOLATION,
+)
 from sqlalchemy import Column
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import Cast
 
 
+def is_unique_violation(error):
+    return error.orig.pgcode == UNIQUE_VIOLATION
+
+
+def is_foreign_key_violation(error):
+    return error.orig.pgcode == FOREIGN_KEY_VIOLATION
+
+
 @contextmanager
 def ignore_unique_violation():
+    """
+    Context manager for gobbling unique violations.
+
+    NOTE: If a unique violation is raised, the existing psql connection will
+    not accept new commands.  This just silences the python-level error.  If
+    you need emit another command after possibly ignoring a unique violation,
+    you should explicitly use savepoints.
+    """
     try:
         yield
     except IntegrityError as error:
-        if error.orig.pgcode != UNIQUE_VIOLATION:
+        if not is_unique_violation(error):
             raise
 
 

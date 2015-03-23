@@ -25,6 +25,7 @@ target_metadata = metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+include_schemas = True
 
 
 def run_migrations_offline():
@@ -61,7 +62,8 @@ def run_migrations_online():
     connection = engine.connect()
     context.configure(
         connection=connection,
-        target_metadata=target_metadata
+        target_metadata=target_metadata,
+        include_schemas=True,
     )
 
     try:

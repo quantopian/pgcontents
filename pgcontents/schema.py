@@ -21,12 +21,13 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    func,
     Integer,
     LargeBinary,
     MetaData,
     Table,
     Unicode,
-    func,
+    UniqueConstraint,
 )
 
 metadata = MetaData(schema='pgcontents')
@@ -68,7 +69,6 @@ directories = Table(
     Column('name', FilePath, nullable=False, primary_key=True),
     Column('parent_user_id', UserID, nullable=True),
     Column('parent_name', FilePath, nullable=True),
-
     # =========== #
     # Constraints #
     # =========== #
@@ -133,6 +133,12 @@ files = Table(
         DateTime,
         default=func.now(),
         nullable=False,
+    ),
+    UniqueConstraint(
+        'user_id',
+        'parent_name',
+        'name',
+        name="uix_filepath_username"
     ),
     ForeignKeyConstraint(
         ['user_id', 'parent_name'],
