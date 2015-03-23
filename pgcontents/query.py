@@ -350,7 +350,7 @@ def file_exists(db, user_id, path):
 
 def rename_file(db, user_id, old_api_path, new_api_path):
     """
-    Rename a file. The file must stay in the same directory.
+    Rename a file.
 
     TODO: Don't do anything if paths are the same.
     """
