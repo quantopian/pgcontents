@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
 from tornado.web import HTTPError
 
-from ..pgmanager import PostgresContentsManager
+from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (
     drop_testing_db_tables,
     migrate_testing_db,
@@ -45,6 +45,20 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         self.contents_manager.ensure_user()
         self.contents_manager.ensure_root_directory()
 
+    def set_pgmgr_attribute(self, name, value):
+        """
+        Overridable method for setting attributes on our pgmanager.
+
+        This exists so that HybridContentsManager can use
+        """
+        setattr(self.contents_manager, name, value)
+
+    def make_dir(self, api_path):
+        self.contents_manager.new(
+            model={'type': 'directory'},
+            path=api_path,
+        )
+
     def tearDown(self):
         drop_testing_db_tables()
         migrate_testing_db()
@@ -58,12 +72,6 @@ class PostgresContentsManagerTestCase(TestContentsManager):
             self.assertEqual(e.status_code, status)
         else:
             self.fail(msg)
-
-    def make_dir(self, api_path):
-        self.contents_manager.new(
-            model={'type': 'directory'},
-            path=api_path,
-        )
 
     def test_modified_date(self):
 
@@ -88,9 +96,10 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         self.assertGreater(renamed['last_modified'], saved['last_modified'])
 
     def test_max_file_size(self):
+
         cm = self.contents_manager
         max_size = 68
-        cm.max_file_size_bytes = max_size
+        self.set_pgmgr_attribute('max_file_size_bytes', max_size)
 
         good = 'a' * 51
         self.assertEqual(len(b64encode(good)), max_size)

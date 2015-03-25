@@ -6,6 +6,7 @@ from base64 import (
     b64decode,
     b64encode,
 )
+from datetime import datetime
 from functools import wraps
 import mimetypes
 import posixpath
@@ -18,6 +19,33 @@ from tornado.web import HTTPError
 from .error import PathOutsideRoot
 
 NBFORMAT_VERSION = 4
+
+# We don't currently track created/modified dates for directories, so this
+# value is always used instead.
+DUMMY_CREATED_DATE = datetime.fromtimestamp(0)
+
+
+def base_model(path):
+    return {
+        "name": path.rsplit('/', 1)[-1],
+        "path": path,
+        "writable": True,
+        "last_modified": None,
+        "created": None,
+        "content": None,
+        "format": None,
+        "mimetype": None,
+    }
+
+
+def base_directory_model(path):
+    m = base_model(path)
+    m.update(
+        type='directory',
+        last_modified=DUMMY_CREATED_DATE,
+        created=DUMMY_CREATED_DATE,
+    )
+    return m
 
 
 def api_path_join(*paths):
@@ -32,9 +60,9 @@ def normalize_api_path(api_path):
     Resolve paths with '..' to normalized paths, raising an error if the final
     result is outside root.
     """
-    normalized = posixpath.normpath(api_path)
+    normalized = posixpath.normpath(api_path.strip('/'))
     if normalized == '.':
-        normalized = '/'
+        normalized = ''
     elif normalized.startswith('..'):
         raise PathOutsideRoot(normalized)
     return normalized
@@ -45,27 +73,17 @@ def from_api_dirname(api_dirname):
     Convert API-style directory name into a db-style directory name.
     """
     normalized = normalize_api_path(api_dirname)
-    return ''.join(
-        [
-            '' if normalized.startswith("/") else '/',
-            normalized,
-            '' if normalized.endswith('/') else '/',
-        ]
-    )
-
+    if normalized == '':
+        return '/'
+    return '/' + normalized + '/'
 
 def from_api_filename(api_path):
     """
     Convert an API-style path into a db-style path.
     """
-    assert len(api_path.strip('/')) > 0
     normalized = normalize_api_path(api_path)
-    return ''.join(
-        [
-            '' if normalized.startswith('/') else '/',
-            normalized,
-        ]
-    )
+    assert len(normalized), "Empty path in from_api_filename"
+    return '/' + normalized
 
 
 def to_api_path(db_path):

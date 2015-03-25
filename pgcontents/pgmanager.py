@@ -16,7 +16,6 @@
 PostgreSQL implementation of IPython ContentsManager API.
 """
 from __future__ import unicode_literals
-from datetime import datetime
 from itertools import chain
 
 from IPython.nbformat import (
@@ -30,6 +29,9 @@ from IPython.html.services.contents.manager import ContentsManager
 from tornado import web
 
 from .api_utils import (
+    base_model,
+    base_directory_model,
+    DUMMY_CREATED_DATE,
     from_b64,
     outside_root_to_404,
     reads_base64,
@@ -59,10 +61,6 @@ from .query import (
     rename_file,
     save_file,
 )
-
-# We don't currently track created/modified dates for directories, so this
-# value is always used instead.
-DUMMY_CREATED_DATE = datetime.fromtimestamp(0)
 
 
 class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
@@ -114,21 +112,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         with self.engine.begin() as db:
             purge_user(db, self.user_id)
 
-    def _base_model(self, path):
-        """
-        Return model keys shared by all types.
-        """
-        return {
-            "name": path.rsplit('/', 1)[-1],
-            "path": path,
-            "writable": True,
-            "last_modified": None,
-            "created": None,
-            "content": None,
-            "format": None,
-            "mimetype": None,
-        }
-
+    @outside_root_to_404
     def guess_type(self, path, allow_directory=True):
         """
         Guess the type of a file.
@@ -192,7 +176,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         Build a notebook model from database record.
         """
         path = to_api_path(record['parent_name'] + record['name'])
-        model = self._base_model(path)
+        model = base_model(path)
         model['type'] = 'notebook'
         model['last_modified'] = model['created'] = record['created_at']
         if content:
@@ -240,12 +224,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         """
         Build a directory model from database directory record.
         """
-        model = self._base_model(to_api_path(record['name']))
-        model['type'] = 'directory'
-        # TODO: Track directory modifications and fill in a real value for
-        # this.
-        model['last_modified'] = model['created'] = DUMMY_CREATED_DATE
-
+        model = base_directory_model(to_api_path(record['name']))
         if content:
             model['format'] = 'json'
             model['content'] = list(
@@ -265,7 +244,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         """
         # TODO: Most of this is shared with _notebook_model_from_db.
         path = to_api_path(record['parent_name'] + record['name'])
-        model = self._base_model(path)
+        model = base_model(path)
         model['type'] = 'file'
         model['last_modified'] = model['created'] = record['created_at']
         if content:
@@ -331,7 +310,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     @outside_root_to_404
     def save(self, model, path):
         if 'type' not in model:
-            raise web.HTTPError(400, u'No file type provided')
+            raise web.HTTPError(400, u'No model type provided')
         if 'content' not in model and model['type'] != 'directory':
             raise web.HTTPError(400, u'No file content provided')
 
