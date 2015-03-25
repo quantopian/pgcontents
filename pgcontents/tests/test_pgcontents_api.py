@@ -64,7 +64,7 @@ class _APITestBase(APITest):
         Test ContentsManager.walk.
         """
         results = {
-            dname: (subdirs, files)
+            _norm_unicode(dname): (subdirs, files)
             for dname, subdirs, files in walk(self.notebook.contents_manager)
         }
         # This is a dictionary because the ordering of these is all messed up
@@ -118,7 +118,7 @@ class _APITestBase(APITest):
         }
 
         for dname, (subdirs, files) in iteritems(expected):
-            result_subdirs, result_files = results.pop(dname)
+            result_subdirs, result_files = results.pop(_norm_unicode(dname))
             if dname == '':
                 sep = ''
             else:
