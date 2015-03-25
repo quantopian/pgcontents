@@ -31,7 +31,6 @@ from tornado import web
 from .api_utils import (
     base_model,
     base_directory_model,
-    DUMMY_CREATED_DATE,
     from_b64,
     outside_root_to_404,
     reads_base64,
