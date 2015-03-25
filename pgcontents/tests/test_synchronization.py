@@ -149,5 +149,5 @@ class TestUploadDownload(TestCase):
             )
             self.assertEqual(
                 new_content['cells'][-1],
-                new_markdown_cell('Created by test: ' + path),
+                new_markdown_cell('Created by test: ' + _norm_unicode(path)),
             )
