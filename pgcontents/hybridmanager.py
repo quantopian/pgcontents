@@ -1,6 +1,7 @@
 """
 Multi-backend ContentsManager.
 """
+from __future__ import unicode_literals
 from IPython.html.services.contents.manager import ContentsManager
 from IPython.utils.traitlets import Dict
 from tornado.web import HTTPError
