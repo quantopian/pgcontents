@@ -145,7 +145,7 @@ class MultiRootTestCase(TestCase):
             self.assertNotIsInstance(nb_as_file['content'], dict)
 
             nb_as_bin_file = cm.get(
-                path,
+                path=path,
                 content=True,
                 type='file',
                 format='base64'
@@ -182,7 +182,7 @@ class MultiRootTestCase(TestCase):
             self.assertTrue(exists(osjoin(real_dir, sub_dir, untitled_txt)))
 
             sub_dir_txtpath = pjoin(prefixed_sub_dir, untitled_txt)
-            file_model = cm.get(sub_dir_txtpath)
+            file_model = cm.get(path=sub_dir_txtpath)
             self.assertDictContainsSubset(
                 {
                     'content': '',
@@ -201,7 +201,11 @@ class MultiRootTestCase(TestCase):
             # Test directory in sub-directory.
             sub_sub_dirname = 'bar'
             sub_sub_dirpath = pjoin(prefixed_sub_dir, sub_sub_dirname)
-            mkdir(osjoin(real_dir, sub_dir, sub_sub_dirname))
+            cm.save(
+                {'type': 'directory', 'path': sub_sub_dirpath},
+                sub_sub_dirpath,
+            )
+            self.assertTrue(exists(osjoin(real_dir, sub_dir, sub_sub_dirname)))
             sub_sub_dir_model = cm.get(sub_sub_dirpath)
             self.assertDictContainsSubset(
                 {
@@ -243,6 +247,35 @@ class MultiRootTestCase(TestCase):
                     self.assertEqual(entry, file_model_no_content)
                 else:
                     self.fail("Unexpected directory entry: %s" % entry)
+
+    def test_root_dir_ops(self):
+        cm = self.contents_manager
+        cm.new_untitled(ext='.ipynb')
+        cm.new_untitled(ext='.txt')
+
+        root_dir_model = cm.get('')
+        self.assertDictContainsSubset(
+            {'path': '', 'name': '', 'type': 'directory', 'format': 'json'},
+            root_dir_model,
+        )
+        content = root_dir_model['content']
+        self.assertIsInstance(content, list)
+        # Two new files, plus the sub-manager directories.
+        dirs = set(self.temp_dir_names)
+        files = {'Untitled.ipynb', 'untitled.txt'}
+        paths = dirs | files
+        self.assertEqual(len(content), 4)
+        for entry in content:
+            self.assertEqual(entry['path'], entry['name'])
+            path = entry['path']
+            if path not in paths:
+                self.fail("Unexpected entry path %s" % entry)
+            if path in dirs:
+                self.assertEqual(entry['type'], 'directory')
+            elif path == 'Untitled.ipynb':
+                self.assertEqual(entry['type'], 'notebook')
+            else:
+                self.assertEqual(entry['type'], 'file')
 
     def tearDown(self):
         for dir_ in itervalues(self.temp_dirs):
