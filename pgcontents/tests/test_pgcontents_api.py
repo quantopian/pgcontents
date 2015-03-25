@@ -21,11 +21,14 @@ from base64 import (
     b64encode,
 )
 from dateutil.parser import parse
+from six import iteritems
+from unicodedata import normalize
 
 from IPython.config import Config
 from IPython.html.services.contents.filecheckpoints import \
     GenericFileCheckpoints
 from IPython.html.services.contents.tests.test_contents_api import APITest
+from IPython.utils import py3compat
 from IPython.utils.tempdir import TemporaryDirectory
 
 from ..constants import UNLIMITED
@@ -46,6 +49,11 @@ from .utils import TEST_DB_URL
 from ..utils.sync import walk, walk_dirs
 
 
+def _norm_unicode(s):
+    """Normalize unicode strings"""
+    normalize('NFC', py3compat.cast_unicode(s))
+
+
 class _APITestBase(APITest):
     """
     APITest that also runs a test for our implementation of `walk`.
@@ -55,10 +63,14 @@ class _APITestBase(APITest):
         """
         Test ContentsManager.walk.
         """
-        results = list(walk(self.notebook.contents_manager))
-        expected = [
-            (
-                '',
+        results = {
+            dname: (subdirs, files)
+            for dname, subdirs, files in walk(self.notebook.contents_manager)
+        }
+        # This is a dictionary because the ordering of these is all messed up
+        # on OSX.
+        expected = {
+            '': (
                 [
                     'Directory with spaces in',
                     'foo',
@@ -68,13 +80,11 @@ class _APITestBase(APITest):
                 ],
                 ['inroot.blob', 'inroot.ipynb', 'inroot.txt'],
             ),
-            (
-                'Directory with spaces in',
+            'Directory with spaces in': (
                 [],
                 ['inspace.blob', 'inspace.ipynb', 'inspace.txt'],
             ),
-            (
-                'foo',
+            'foo': (
                 ['bar'],
                 [
                     'a.blob', 'a.ipynb', 'a.txt',
@@ -85,13 +95,11 @@ class _APITestBase(APITest):
                     u'unicodé.blob', u'unicodé.ipynb', u'unicodé.txt'
                 ]
             ),
-            (
-                'foo/bar',
+            'foo/bar': (
                 [],
                 ['baz.blob', 'baz.ipynb', 'baz.txt'],
             ),
-            (
-                'ordering',
+            'ordering': (
                 [],
                 [
                     'A.blob', 'A.ipynb', 'A.txt',
@@ -99,36 +107,41 @@ class _APITestBase(APITest):
                     'b.blob', 'b.ipynb', 'b.txt',
                 ],
             ),
-            (
-                u'unicodé',
+            u'unicodé': (
                 [],
                 ['innonascii.blob', 'innonascii.ipynb', 'innonascii.txt'],
             ),
-            (
-                u'å b',
+            u'å b': (
                 [],
                 [u'ç d.blob', u'ç d.ipynb', u'ç d.txt'],
             ),
-        ]
+        }
 
-        for idx, (dname, subdirs, files) in enumerate(expected):
-            result_dname, result_subdirs, result_files = results[idx]
+        for dname, (subdirs, files) in iteritems(expected):
+            result_subdirs, result_files = results.pop(dname)
             if dname == '':
                 sep = ''
             else:
                 sep = '/'
             self.assertEqual(
-                dname,
-                result_dname,
+                set(
+                    map(
+                        _norm_unicode,
+                        [sep.join([dname, sub]) for sub in subdirs]
+                    )
+                ),
+                set(map(_norm_unicode, result_subdirs)),
             )
             self.assertEqual(
-                [sep.join([dname, sub]) for sub in subdirs],
-                result_subdirs,
+                set(
+                    map(
+                        _norm_unicode,
+                        [sep.join([dname, fname]) for fname in files]
+                    ),
+                ),
+                set(map(_norm_unicode, result_files)),
             )
-            self.assertEqual(
-                [sep.join([dname, fname]) for fname in files],
-                result_files,
-            )
+        self.assertEqual(results, {})
 
     def test_list_checkpoints_sorting(self):
         """
