@@ -18,13 +18,12 @@ Run IPython's TestContentsManager using PostgresContentsManager.
 from __future__ import unicode_literals
 
 from base64 import b64encode
-from contextlib import contextmanager
 
 from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
-from tornado.web import HTTPError
 
 from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (
+    assertRaisesHTTPError,
     drop_testing_db_tables,
     migrate_testing_db,
     TEST_DB_URL,
@@ -62,16 +61,6 @@ class PostgresContentsManagerTestCase(TestContentsManager):
     def tearDown(self):
         drop_testing_db_tables()
         migrate_testing_db()
-
-    @contextmanager
-    def assertRaisesHTTPError(self, status, msg=None):
-        msg = msg or "Should have raised HTTPError(%i)" % status
-        try:
-            yield
-        except HTTPError as e:
-            self.assertEqual(e.status_code, status)
-        else:
-            self.fail(msg)
 
     def test_modified_date(self):
 
@@ -116,7 +105,7 @@ class PostgresContentsManagerTestCase(TestContentsManager):
 
         bad = 'a' * 52
         self.assertGreater(bad, max_size)
-        with self.assertRaises(HTTPError) as ctx:
+        with assertRaisesHTTPError(self, 413):
             cm.save(
                 model={
                     'content': bad,
@@ -125,8 +114,6 @@ class PostgresContentsManagerTestCase(TestContentsManager):
                 },
                 path='bad.txt',
             )
-        err = ctx.exception
-        self.assertEqual(err.status_code, 413)
 
     def test_relative_paths(self):
         cm = self.contents_manager
@@ -135,15 +122,15 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         self.assertEqual(cm.get(path), cm.get('/a/../' + path))
         self.assertEqual(cm.get(path), cm.get('/a/../b/c/../../' + path))
 
-        with self.assertRaisesHTTPError(404):
+        with assertRaisesHTTPError(self, 404):
             cm.get('..')
-        with self.assertRaisesHTTPError(404):
+        with assertRaisesHTTPError(self, 404):
             cm.get('foo/../../../bar')
-        with self.assertRaisesHTTPError(404):
+        with assertRaisesHTTPError(self, 404):
             cm.delete('../foo')
-        with self.assertRaisesHTTPError(404):
+        with assertRaisesHTTPError(self, 404):
             cm.rename('../foo', '../bar')
-        with self.assertRaisesHTTPError(404):
+        with assertRaisesHTTPError(self, 404):
             cm.save(model={
                 'type': 'file',
                 'content': u'',
