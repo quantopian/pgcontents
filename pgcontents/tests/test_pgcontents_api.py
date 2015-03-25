@@ -51,7 +51,7 @@ from ..utils.sync import walk, walk_dirs
 
 def _norm_unicode(s):
     """Normalize unicode strings"""
-    normalize('NFC', py3compat.cast_unicode(s))
+    return normalize('NFC', py3compat.cast_unicode(s))
 
 
 class _APITestBase(APITest):
