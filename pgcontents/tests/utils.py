@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from getpass import getuser
 from itertools import starmap
 import posixpath
+from unicodedata import normalize
 
 from IPython.nbformat.v4.nbbase import (
     new_code_cell,
@@ -14,8 +15,10 @@ from IPython.nbformat.v4.nbbase import (
     new_notebook,
     new_raw_cell,
 )
+from IPython.utils import py3compat
 from sqlalchemy import create_engine
 from tornado.web import HTTPError
+
 
 from ..api_utils import api_path_join
 from ..utils.migrate import upgrade
@@ -23,6 +26,11 @@ from ..utils.migrate import upgrade
 TEST_DB_URL = "postgresql://{user}@/pgcontents_testing".format(
     user=getuser(),
 )
+
+
+def _norm_unicode(s):
+    """Normalize unicode strings"""
+    return normalize('NFC', py3compat.cast_unicode(s))
 
 
 @contextmanager

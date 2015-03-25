@@ -22,13 +22,11 @@ from base64 import (
 )
 from dateutil.parser import parse
 from six import iteritems
-from unicodedata import normalize
 
 from IPython.config import Config
 from IPython.html.services.contents.filecheckpoints import \
     GenericFileCheckpoints
 from IPython.html.services.contents.tests.test_contents_api import APITest
-from IPython.utils import py3compat
 from IPython.utils.tempdir import TemporaryDirectory
 
 from ..constants import UNLIMITED
@@ -45,13 +43,11 @@ from ..query import (
     file_exists,
     save_file,
 )
-from .utils import TEST_DB_URL
+from .utils import (
+    _norm_unicode,
+    TEST_DB_URL,
+)
 from ..utils.sync import walk, walk_dirs
-
-
-def _norm_unicode(s):
-    """Normalize unicode strings"""
-    return normalize('NFC', py3compat.cast_unicode(s))
 
 
 class _APITestBase(APITest):

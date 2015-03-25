@@ -12,6 +12,7 @@ from six import iteritems
 
 from ..checkpoints import PostgresCheckpoints
 from .utils import (
+    _norm_unicode,
     drop_testing_db_tables,
     migrate_testing_db,
     populate,
@@ -141,7 +142,7 @@ class TestUploadDownload(TestCase):
             for path, cp in iteritems(new_cps)
         }
         for path, new_content in iteritems(new_cp_content):
-            old_content = original_content_minus_trust[path]
+            old_content = original_content_minus_trust[_norm_unicode(path)]
             self.assertEqual(
                 new_content['cells'][:-1],
                 old_content['cells'],
