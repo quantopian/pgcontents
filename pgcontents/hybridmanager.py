@@ -215,6 +215,7 @@ class HybridContentsManager(ContentsManager):
             if path
         ]
 
+    is_hidden = path_dispatch1('is_hidden', False)
     dir_exists = path_dispatch1('dir_exists', False)
     file_exists = path_dispatch_kwarg('file_exists', '', False)
     exists = path_dispatch1('exists', False)
