@@ -24,12 +24,16 @@ from dateutil.parser import parse
 from six import iteritems
 
 from IPython.config import Config
+from IPython.html.services.contents.filemanager import FileContentsManager
 from IPython.html.services.contents.filecheckpoints import \
     GenericFileCheckpoints
 from IPython.html.services.contents.tests.test_contents_api import APITest
+from IPython.html.utils import to_os_path
 from IPython.utils.tempdir import TemporaryDirectory
+from requests import HTTPError
 
 from ..constants import UNLIMITED
+from ..hybridmanager import HybridContentsManager
 from ..pgmanager import (
     PostgresContentsManager,
     writes_base64,
@@ -45,6 +49,8 @@ from ..query import (
 )
 from .utils import (
     _norm_unicode,
+    drop_testing_db_tables,
+    migrate_testing_db,
     TEST_DB_URL,
 )
 from ..utils.sync import walk, walk_dirs
@@ -166,17 +172,28 @@ class PostgresContentsAPITest(_APITestBase):
     # Don't support hidden directories.
     hidden_dirs = []
 
+    @classmethod
+    def setup_class(cls):
+        drop_testing_db_tables()
+        migrate_testing_db()
+        super(PostgresContentsAPITest, cls).setup_class()
+
+    @classmethod
+    def teardown_class(cls):
+        drop_testing_db_tables()
+        super(PostgresContentsAPITest, cls).teardown_class()
+
     @property
-    def contents_manager(self):
+    def pg_manager(self):
         return self.notebook.contents_manager
 
     @property
     def user_id(self):
-        return self.contents_manager.user_id
+        return self.pg_manager.user_id
 
     @property
     def engine(self):
-        return self.contents_manager.engine
+        return self.pg_manager.engine
 
     # Superclass method overrides.
     def make_dir(self, api_path):
@@ -204,7 +221,7 @@ class PostgresContentsAPITest(_APITestBase):
     def delete_dir(self, api_path, db=None):
         if self.isdir(api_path):
             dirs, files = [], []
-            for dir_, _, fs in walk_dirs(self.contents_manager, [api_path]):
+            for dir_, _, fs in walk_dirs(self.pg_manager, [api_path]):
                 dirs.append(dir_)
                 files.extend(fs)
 
@@ -253,6 +270,8 @@ class PostgresContentsFileCheckpointsAPITest(PostgresContentsAPITest):
 
     @classmethod
     def setup_class(cls):
+        drop_testing_db_tables()
+        migrate_testing_db()
         cls.td = TemporaryDirectory()
         cls.config.GenericFileCheckpoints.root_dir = cls.td.name
         super(PostgresContentsFileCheckpointsAPITest, cls).setup_class()
@@ -261,6 +280,7 @@ class PostgresContentsFileCheckpointsAPITest(PostgresContentsAPITest):
     def teardown_class(cls):
         super(PostgresContentsFileCheckpointsAPITest, cls).teardown_class()
         cls.td.cleanup()
+        drop_testing_db_tables()
 
 
 class PostgresCheckpointsAPITest(_APITestBase):
@@ -269,6 +289,7 @@ class PostgresCheckpointsAPITest(_APITestBase):
     """
 
     config = Config()
+    config.NotebookApp.contents_manager_class = FileContentsManager
     config.ContentsManager.checkpoints_class = PostgresCheckpoints
     config.PostgresCheckpoints.user_id = 'test'
     config.PostgresCheckpoints.db_url = TEST_DB_URL
@@ -276,6 +297,17 @@ class PostgresCheckpointsAPITest(_APITestBase):
     @property
     def checkpoints(self):
         return self.notebook.contents_manager.checkpoints
+
+    @classmethod
+    def setup_class(cls):
+        drop_testing_db_tables()
+        migrate_testing_db()
+        super(PostgresCheckpointsAPITest, cls).setup_class()
+
+    @classmethod
+    def teardown_class(cls):
+        super(PostgresCheckpointsAPITest, cls).teardown_class()
+        drop_testing_db_tables()
 
     def setUp(self):
         super(PostgresCheckpointsAPITest, self).setUp()
@@ -291,6 +323,102 @@ class PostgresCheckpointsAPITest(_APITestBase):
 
     def test_checkpoints_separate_root(self):
         pass
+
+
+class HybridContentsPGRootAPITest(PostgresContentsAPITest):
+    """
+    Test using a HybridContentsManager splitting between files and Postgres.
+    """
+    files_prefix = 'foo'
+    files_test_cls = APITest
+
+    @classmethod
+    def setup_class(cls):
+
+        drop_testing_db_tables()
+        migrate_testing_db()
+        cls.td = TemporaryDirectory()
+
+        cls.config = Config()
+        cls.config.NotebookApp.contents_manager_class = HybridContentsManager
+        cls.config.HybridContentsManager.manager_classes = {
+            '': PostgresContentsManager,
+            cls.files_prefix: FileContentsManager,
+        }
+        cls.config.HybridContentsManager.manager_kwargs = {
+            '': {'user_id': 'test', 'db_url': TEST_DB_URL},
+            cls.files_prefix: {'root_dir': cls.td.name},
+        }
+        super(HybridContentsPGRootAPITest, cls).setup_class()
+
+    @classmethod
+    def teardown_class(cls):
+        super(HybridContentsPGRootAPITest, cls).teardown_class()
+        drop_testing_db_tables()
+
+    @property
+    def pg_manager(self):
+        return self.notebook.contents_manager.root_manager
+
+    def to_os_path(self, api_path):
+        return to_os_path(api_path, root=self.td.name)
+
+    # Autogenerate setup methods by dispatching on api_path.
+    def __api_path_dispatch(method_name):
+        """
+        For a given method name, create a method which either uses the
+        PostgresContentsAPITest implementation of that method name, or the base
+        APITest implementation, depending on whether the given path starts with
+        self.files_prefix.
+        """
+        def _method(self, api_path, *args):
+            parts = api_path.strip('/').split('/')
+            if parts[0] == self.files_prefix:
+                # Dispatch to filesystem.
+                return getattr(self.files_test_cls, method_name)(
+                    self, '/'.join(parts[1:]), *args
+                )
+            else:
+                # Dispatch to Postgres.
+                return getattr(PostgresContentsAPITest, method_name)(
+                    self, api_path, *args
+                )
+        return _method
+
+    __methods_to_multiplex = [
+        'make_txt',
+        'make_blob',
+        'make_dir',
+        'make_nb',
+        'delete_dir',
+        'delete_file',
+        'isfile',
+        'isdir',
+    ]
+    l = locals()
+    for method_name in __methods_to_multiplex:
+        l[method_name] = __api_path_dispatch(method_name)
+    del __methods_to_multiplex
+    del __api_path_dispatch
+
+    # Override to not delete the root of the file subsystem.
+    def test_delete_dirs(self):
+        # depth-first delete everything, so we don't try to delete empty
+        # directories
+        for name in sorted(self.dirs + ['/'], key=len, reverse=True):
+            listing = self.api.list(name).json()['content']
+            for model in listing:
+                # Expect delete to fail on root of file subsystem.
+                if model['path'] == self.files_prefix:
+                    with self.assertRaises(HTTPError) as err:
+                        self.api.delete(model['path'])
+                    self.assertEqual(err.exception.response.status_code, 400)
+                else:
+                    self.api.delete(model['path'])
+
+        listing = self.api.list('/').json()['content']
+        self.assertEqual(len(listing), 1)
+        self.assertEqual(listing[0]['path'], self.files_prefix)
 
 
 # This needs to be removed or else we'll run the main IPython tests as well.

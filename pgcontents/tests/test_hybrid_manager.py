@@ -19,6 +19,7 @@ from unittest import TestCase
 
 from IPython.html.services.contents.filemanager import FileContentsManager
 from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
+from IPython.html.services.contents.tests.test_contents_api import APITest  # noqa
 from IPython.utils.tempdir import TemporaryDirectory
 
 from pgcontents.hybridmanager import HybridContentsManager
@@ -26,6 +27,7 @@ from pgcontents.pgmanager import PostgresContentsManager
 
 from .test_pgmanager import PostgresContentsManagerTestCase
 from .utils import (
+    assertRaisesHTTPError,
     drop_testing_db_tables,
     migrate_testing_db,
     TEST_DB_URL,
@@ -277,6 +279,12 @@ class MultiRootTestCase(TestCase):
             else:
                 self.assertEqual(entry['type'], 'file')
 
+    def test_cant_delete_root(self):
+        cm = self.contents_manager
+        for prefix in self.temp_dirs:
+            with assertRaisesHTTPError(self, 400):
+                cm.delete(prefix)
+
     def tearDown(self):
         for dir_ in itervalues(self.temp_dirs):
             dir_.cleanup()
@@ -284,3 +292,4 @@ class MultiRootTestCase(TestCase):
 
 del PostgresContentsManagerTestCase
 del TestContentsManager
+del APITest

@@ -2,6 +2,8 @@
 Multi-backend ContentsManager.
 """
 from __future__ import unicode_literals
+
+from six import iteritems
 from IPython.html.services.contents.manager import ContentsManager
 from IPython.utils.traitlets import Dict
 from tornado.web import HTTPError
@@ -64,7 +66,9 @@ def _apply_prefix(prefix, model):
     if not isinstance(model, dict):
         raise TypeError("Expected dict for model, got %s" % type(model))
 
-    model['path'] = '/'.join((prefix, model['path']))
+    # We get unwanted leading/trailing slashes if prefix or model['path'] are
+    # '', both of which are legal values.
+    model['path'] = '/'.join((prefix, model['path'])).strip('/')
     if model['type'] in ('notebook', 'file'):
         return model
 
@@ -166,10 +170,28 @@ class HybridContentsManager(ContentsManager):
     ContentsManager subclass that delegates specific subdirectories to other
     ContentsManager/Checkpoints pairs.
     """
-    managers = Dict(
+
+    manager_classes = Dict(
         config=True,
-        help=("Dict mapping root dir -> ContentsManager.")
+        help=("Dict mapping root dir -> ContentsManager class.")
     )
+
+    manager_kwargs = Dict(
+        config=True,
+        help=("Dict of dicts mapping root dir -> kwargs for manager.")
+    )
+
+    managers = Dict(help=("Dict mapping root dir -> ContentsManager."))
+
+    def _managers_default(self):
+        return {
+            key: mgr_cls(
+                parent=self,
+                log=self.log,
+                **self.manager_kwargs.get(key, {})
+            )
+            for key, mgr_cls in iteritems(self.manager_classes)
+        }
 
     def _managers_changed(self, name, old, new):
         """
@@ -198,10 +220,10 @@ class HybridContentsManager(ContentsManager):
     exists = path_dispatch1('exists', False)
 
     save = path_dispatch2('save', 'model', True)
-    delete = path_dispatch1('delete', False)
     rename = path_dispatch_old_new('rename', False)
 
     __get = path_dispatch1('get', True)
+    __delete = path_dispatch1('delete', False)
 
     @outside_root_to_404
     def get(self, path, content=True, type=None, format=None):
@@ -233,8 +255,22 @@ class HybridContentsManager(ContentsManager):
             root_model['content'].extend(extra_content)
         return root_model
 
+    @outside_root_to_404
+    def delete(self, path):
+        """
+        Ensure that roots of our managers can't be deleted.  This should be
+        enforced by https://github.com/ipython/ipython/pull/8168, but rogue
+        implementations might override this behavior.
+        """
+        path = normalize_api_path(path)
+        if path in self.managers:
+            raise HTTPError(
+                400, "Can't delete root of %s" % self.managers[path]
+            )
+        return self.__delete(path)
+
     create_checkpoint = path_dispatch1('create_checkpoint', False)
-    list_checkpoint = path_dispatch1('list_checkpoint', False)
+    list_checkpoints = path_dispatch1('list_checkpoints', False)
     restore_checkpoint = path_dispatch2(
         'restore_checkpoint',
         'checkpoint_id',
