@@ -77,6 +77,7 @@ def from_api_dirname(api_dirname):
         return '/'
     return '/' + normalized + '/'
 
+
 def from_api_filename(api_path):
     """
     Convert an API-style path into a db-style path.
