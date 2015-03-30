@@ -158,6 +158,7 @@ class _APITestBase(APITest):
             sorted(
                 cps,
                 key=lambda cp: parse(cp['last_modified']),
+                reverse=True,
             )
         )
 

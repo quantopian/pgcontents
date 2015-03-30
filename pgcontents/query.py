@@ -482,7 +482,7 @@ def list_remote_checkpoints(db, user_id, api_path):
                 remote_checkpoints.c.path == db_path,
             ),
         ).order_by(
-            asc(remote_checkpoints.c.last_modified),
+            desc(remote_checkpoints.c.last_modified),
         ),
     )
 
