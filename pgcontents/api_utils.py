@@ -193,13 +193,15 @@ def to_b64(content, fmt):
 
 def prefix_dirs(path):
     """
-    Yield all prefix directories of path.
+    Return an iterable of all prefix directories of path, descending from root.
     """
     _dirname = posixpath.dirname
     path = path.strip('/')
+    out = []
     while path != '':
         path = _dirname(path)
-        yield path
+        out.append(path)
+    return reversed(out)
 
 
 def outside_root_to_404(fn):

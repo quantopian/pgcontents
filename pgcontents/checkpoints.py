@@ -149,11 +149,13 @@ class PostgresCheckpoints(PostgresManagerMixin,
                 if not path.endswith('.ipynb'):
                     self.log.warn('Ignoring non-notebook file: {}', path)
                     continue
-                for dirname in reversed(prefix_dirs(path)):
+                for dirname in prefix_dirs(path):
+                    self.log.info("Ensuring directory [%s]" % dirname)
                     contents_mgr.save(
                         model={'type': 'directory'},
                         path=dirname,
                     )
+                self.log.info("Writing notebook [%s]" % path)
                 contents_mgr.save(
                     self.get_notebook_checkpoint(record['id'], path),
                     path,
