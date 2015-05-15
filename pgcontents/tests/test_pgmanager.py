@@ -21,6 +21,7 @@ from base64 import b64encode
 
 from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
 
+from tornado.web import HTTPError
 from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (
     assertRaisesHTTPError,
@@ -33,7 +34,6 @@ from .utils import (
 class PostgresContentsManagerTestCase(TestContentsManager):
 
     def setUp(self):
-
         drop_testing_db_tables()
         migrate_testing_db()
 
@@ -83,6 +83,79 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         cm.rename(path, new_path)
         renamed = cm.get(new_path)
         self.assertGreater(renamed['last_modified'], saved['last_modified'])
+
+    def test_rename_directory(self):
+        cm = self.contents_manager
+
+        # Create an untitled directory
+        foo_dir = cm.new_untitled(type='directory')
+        old_foo_dir_path = foo_dir['path']
+
+        # Change the path on the model and call cm.update to rename
+        foo_dir_path = 'foo'
+        foo_dir['path'] = foo_dir_path
+        foo_dir = cm.update(foo_dir, old_foo_dir_path)
+
+        # Check that the cm.update returns a model
+        assert isinstance(foo_dir, dict)
+
+        # Make sure the untitled directory is gone
+        self.assertRaises(HTTPError, cm.get, old_foo_dir_path)
+
+        # Create a subdirectory
+        bar_dir = cm.new(
+            model={'type': 'directory'},
+            path='foo/bar',
+        )
+        old_bar_dir_path = bar_dir['path']
+
+        # Create a file in the subdirectory
+        bar_file = cm.new_untitled(path='foo/bar', type='notebook')
+        old_bar_file_path = bar_file['path']
+
+        # Create another subdirectory one level deeper.  Use 'foo' for the name
+        # again to catch issues with replacing all instances of a substring
+        # instead of just the first.
+        bar2_dir = cm.new(
+            model={'type': 'directory'},
+            path='foo/bar/bar',
+        )
+        old_bar2_dir_path = bar2_dir['path']
+
+        # Create a file in the two-level deep directory we just created
+        bar2_file = cm.new_untitled(path=old_bar2_dir_path, type='notebook')
+        old_bar2_file_path = bar2_file['path']
+
+        # Change the path of the first bar directory
+        new_bar_dir_path = 'foo/bar_changed'
+        bar_dir['path'] = new_bar_dir_path
+        bar_dir = cm.update(bar_dir, old_bar_dir_path)
+        self.assertIn('name', bar_dir)
+        self.assertIn('path', bar_dir)
+        self.assertEqual(bar_dir['name'], 'bar_changed')
+
+        # Make sure calling cm.get on any old paths throws an exception
+        self.assertRaises(HTTPError, cm.get, old_bar_dir_path)
+        self.assertRaises(HTTPError, cm.get, old_bar2_dir_path)
+        self.assertRaises(HTTPError, cm.get, old_bar_file_path)
+        self.assertRaises(HTTPError, cm.get, old_bar2_file_path)
+
+        def try_get_new_path(full_old_path):
+            # replace the first occurence of the old path with the new one
+            new_path = full_old_path.replace(
+                old_bar_dir_path,
+                new_bar_dir_path,
+                1
+            )
+            new_model = cm.get(new_path)
+            self.assertIn('name', new_model)
+            self.assertIn('path', new_model)
+
+        # Make sure the directories and files can be found at their new paths
+        try_get_new_path(foo_dir_path) # top level foo dir should be unchanged
+        try_get_new_path(old_bar_file_path)
+        try_get_new_path(old_bar2_dir_path)
+        try_get_new_path(old_bar2_file_path)
 
     def test_max_file_size(self):
 

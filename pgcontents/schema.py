@@ -75,6 +75,8 @@ directories = Table(
     ForeignKeyConstraint(
         ['parent_user_id', 'parent_name'],
         ['directories.user_id', 'directories.name'],
+        deferrable=True,
+        initially=u'IMMEDIATE'
     ),
     CheckConstraint(
         'user_id = parent_user_id',
@@ -143,6 +145,7 @@ files = Table(
     ForeignKeyConstraint(
         ['user_id', 'parent_name'],
         [directories.c.user_id, directories.c.name],
+        onupdate=u'CASCADE'
     ),
 )
 

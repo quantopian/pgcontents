@@ -22,6 +22,8 @@ class PathOutsideRoot(Exception):
 class FileExists(Exception):
     pass
 
+class DirectoryExists(Exception):
+    pass
 
 class DirectoryNotEmpty(Exception):
     pass

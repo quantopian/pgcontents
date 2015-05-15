@@ -43,6 +43,7 @@ from .constants import UNLIMITED
 from .error import (
     DirectoryNotEmpty,
     FileExists,
+    DirectoryExists,
     FileTooLarge,
     NoSuchDirectory,
     NoSuchFile,
@@ -57,7 +58,7 @@ from .query import (
     get_directory,
     get_file,
     purge_user,
-    rename_file,
+    rename,
     save_file,
 )
 
@@ -351,8 +352,8 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         """
         with self.engine.begin() as db:
             try:
-                rename_file(db, self.user_id, old_path, path)
-            except FileExists:
+                rename(db, self.user_id, old_path, path)
+            except (FileExists, DirectoryExists):
                 self.already_exists(path)
 
     def _delete_non_directory(self, path):
