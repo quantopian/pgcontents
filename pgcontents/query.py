@@ -5,7 +5,6 @@ from textwrap import dedent
 
 from sqlalchemy import (
     and_,
-    asc,
     cast,
     desc,
     func,
