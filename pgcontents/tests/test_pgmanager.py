@@ -18,6 +18,7 @@ Run IPython's TestContentsManager using PostgresContentsManager.
 from __future__ import unicode_literals
 
 from base64 import b64encode
+from itertools import combinations
 
 from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
 
@@ -58,6 +59,43 @@ class PostgresContentsManagerTestCase(TestContentsManager):
             path=api_path,
         )
 
+    def make_populated_dir(self, api_path):
+        """
+        Create a directory at api_path with a notebook and a text file.
+        """
+        self.make_dir(api_path)
+        self.contents_manager.new(
+            path='/'.join([api_path, 'nb.ipynb'])
+        )
+        self.contents_manager.new(
+            path='/'.join([api_path, 'file.txt'])
+        )
+
+    def check_populated_dir_files(self, api_path):
+        """
+        Check that a directory created with make_populated_dir has a
+        notebook and a text file with expected names.
+        """
+        dirmodel = self.contents_manager.get(api_path)
+        self.assertEqual(dirmodel['path'], api_path)
+        self.assertEqual(dirmodel['type'], 'directory')
+        for entry in dirmodel['content']:
+            # Skip any subdirectories created after the fact.
+            if entry['type'] == 'directory':
+                continue
+            elif entry['type'] == 'file':
+                self.assertEqual(entry['name'], 'file.txt')
+                self.assertEqual(
+                    entry['path'],
+                    '/'.join([api_path, 'file.txt']),
+                )
+            elif entry['type'] == 'notebook':
+                self.assertEqual(entry['name'], 'nb.ipynb')
+                self.assertEqual(
+                    entry['path'],
+                    '/'.join([api_path, 'nb.ipynb']),
+                )
+
     def tearDown(self):
         drop_testing_db_tables()
         migrate_testing_db()
@@ -85,77 +123,59 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         self.assertGreater(renamed['last_modified'], saved['last_modified'])
 
     def test_rename_directory(self):
+        """
+        Create a directory hierarchy that looks like:
+
+        foo/
+          ...
+          bar/
+            ...
+            foo/
+              ...
+              bar/
+                ...
+        bar/
+
+        then rename /foo/bar -> /foo/bar_changed and verify that all changes
+        propagate correctly.
+        """
         cm = self.contents_manager
 
-        # Create an untitled directory
-        foo_dir = cm.new_untitled(type='directory')
-        old_foo_dir_path = foo_dir['path']
+        all_dirs = ['foo', 'bar', 'foo/bar', 'foo/bar/foo', 'foo/bar/foo/bar']
+        unchanged_dirs = all_dirs[:2]
+        changed_dirs = all_dirs[2:]
 
-        # Change the path on the model and call cm.update to rename
-        foo_dir_path = 'foo'
-        foo_dir['path'] = foo_dir_path
-        foo_dir = cm.update(foo_dir, old_foo_dir_path)
+        for dir_ in all_dirs:
+            self.make_populated_dir(dir_)
+            self.check_populated_dir_files(dir_)
 
-        # Check that the cm.update returns a model
-        assert isinstance(foo_dir, dict)
+        # Renaming to an extant directory should raise
+        for src, dest in combinations(all_dirs, 2):
+            with assertRaisesHTTPError(self, 409):
+                cm.rename(src, dest)
 
-        # Make sure the untitled directory is gone
-        self.assertRaises(HTTPError, cm.get, old_foo_dir_path)
+        # Verify that we can't create a new notebook in the (nonexistent)
+        # target directory
+        with assertRaisesHTTPError(self, 404):
+            cm.new_untitled('foo/bar_changed', ext='.ipynb')
 
-        # Create a subdirectory
-        bar_dir = cm.new(
-            model={'type': 'directory'},
-            path='foo/bar',
-        )
-        old_bar_dir_path = bar_dir['path']
+        cm.rename('foo/bar', 'foo/bar_changed')
 
-        # Create a file in the subdirectory
-        bar_file = cm.new_untitled(path='foo/bar', type='notebook')
-        old_bar_file_path = bar_file['path']
+        # foo/ and bar/ should be unchanged
+        for unchanged in unchanged_dirs:
+            self.check_populated_dir_files(unchanged)
 
-        # Create another subdirectory one level deeper.  Use 'foo' for the name
-        # again to catch issues with replacing all instances of a substring
-        # instead of just the first.
-        bar2_dir = cm.new(
-            model={'type': 'directory'},
-            path='foo/bar/bar',
-        )
-        old_bar2_dir_path = bar2_dir['path']
-
-        # Create a file in the two-level deep directory we just created
-        bar2_file = cm.new_untitled(path=old_bar2_dir_path, type='notebook')
-        old_bar2_file_path = bar2_file['path']
-
-        # Change the path of the first bar directory
-        new_bar_dir_path = 'foo/bar_changed'
-        bar_dir['path'] = new_bar_dir_path
-        bar_dir = cm.update(bar_dir, old_bar_dir_path)
-        self.assertIn('name', bar_dir)
-        self.assertIn('path', bar_dir)
-        self.assertEqual(bar_dir['name'], 'bar_changed')
-
-        # Make sure calling cm.get on any old paths throws an exception
-        self.assertRaises(HTTPError, cm.get, old_bar_dir_path)
-        self.assertRaises(HTTPError, cm.get, old_bar2_dir_path)
-        self.assertRaises(HTTPError, cm.get, old_bar_file_path)
-        self.assertRaises(HTTPError, cm.get, old_bar2_file_path)
-
-        def try_get_new_path(full_old_path):
-            # replace the first occurence of the old path with the new one
-            new_path = full_old_path.replace(
-                old_bar_dir_path,
-                new_bar_dir_path,
-                1
+        # foo/bar/ and subdirectories should have leading prefixes changed
+        for changed_dirname in changed_dirs:
+            with assertRaisesHTTPError(self, 404):
+                cm.get(changed_dirname)
+            new_dirname = changed_dirname.replace(
+                'foo/bar', 'foo/bar_changed', 1
             )
-            new_model = cm.get(new_path)
-            self.assertIn('name', new_model)
-            self.assertIn('path', new_model)
+            self.check_populated_dir_files(new_dirname)
 
-        # Make sure the directories and files can be found at their new paths
-        try_get_new_path(foo_dir_path) # top level foo dir should be unchanged
-        try_get_new_path(old_bar_file_path)
-        try_get_new_path(old_bar2_dir_path)
-        try_get_new_path(old_bar2_file_path)
+        # Verify that we can now create a new notebook in the changed directory
+        cm.new_untitled('foo/bar_changed', ext='.ipynb')
 
     def test_max_file_size(self):
 
