@@ -51,14 +51,16 @@ from .error import (
 )
 from .managerbase import PostgresManagerMixin
 from .query import (
-    delete_file,
     delete_directory,
+    delete_file,
     dir_exists,
     ensure_directory,
+    file_exists,
     get_directory,
     get_file,
     purge_user,
-    rename,
+    rename_directory,
+    rename_file,
     save_file,
 )
 
@@ -139,11 +141,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     @outside_root_to_404
     def file_exists(self, path):
         with self.engine.begin() as db:
-            try:
-                get_file(db, self.user_id, path, include_content=False)
-                return True
-            except NoSuchFile:
-                return False
+            return file_exists(db, self.user_id, path)
 
     @outside_root_to_404
     def get(self, path, content=True, type=None, format=None):
@@ -349,10 +347,18 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     def rename_file(self, old_path, path):
         """
         Rename object from old_path to path.
+
+        NOTE: This method is unfortunately named on the base class.  It
+        actually moves a file or a directory.
         """
         with self.engine.begin() as db:
             try:
-                rename(db, self.user_id, old_path, path)
+                if self.file_exists(old_path):
+                    rename_file(db, self.user_id, old_path, path)
+                elif self.dir_exists(old_path):
+                    rename_directory(db, self.user_id, old_path, path)
+                else:
+                    self.no_such_entity(path)
             except (FileExists, DirectoryExists):
                 self.already_exists(path)
 
