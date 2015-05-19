@@ -22,7 +22,6 @@ from itertools import combinations
 
 from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
 
-from tornado.web import HTTPError
 from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (
     assertRaisesHTTPError,
