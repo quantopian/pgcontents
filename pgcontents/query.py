@@ -349,12 +349,15 @@ def file_exists(db, user_id, path):
         return False
 
 
-def rename(db, user_id, old_api_path, new_api_path):
+def rename_file(db, user_id, old_api_path, new_api_path):
     """
-    Rename a file or a directory.
+    Rename a file.
+    """
 
-    TODO: Don't do anything if paths are the same.
-    """
+    # Overwriting existing files is disallowed.
+    if file_exists(db, user_id, new_api_path):
+        raise FileExists(new_api_path)
+
     old_dir, old_name = split_api_filepath(old_api_path)
     new_dir, new_name = split_api_filepath(new_api_path)
     if old_dir != new_dir:
@@ -371,74 +374,69 @@ def rename(db, user_id, old_api_path, new_api_path):
             )
         )
 
-    # Only allow writes to extant directories
-    if not _dir_exists(db, user_id, new_dir):
-        raise NoSuchDirectory(new_dir)
-
-    # If we're renaming a file
-    if file_exists(db, user_id, old_api_path):
-        # Overwriting existing files is disallowed.
-        if file_exists(db, user_id, new_api_path):
-            raise FileExists(new_api_path)
-
-        db.execute(
-            files.update().where(
-                _file_where(user_id, old_api_path),
-            ).values(
-                name=new_name,
-                created_at=func.now(),
-            )
+    db.execute(
+        files.update().where(
+            _file_where(user_id, old_api_path),
+        ).values(
+            name=new_name,
+            created_at=func.now(),
         )
+    )
 
-    # If we're renaming a directory
+
+def rename_directory(db, user_id, old_api_path, new_api_path):
+    """
+    Rename a directory.
+    """
     old_db_path = from_api_dirname(old_api_path)
     new_db_path = from_api_dirname(new_api_path)
-    if _dir_exists(db, user_id, old_db_path):
-        # Overwriting existing directories is disallowed.
-        if _dir_exists(db, user_id, new_db_path):
-            raise DirectoryExists(new_api_path)
 
-        # Set this foreign key constraint to deferred so it's not violated
-        # when we run the first statement to update the name of the directory.
-        db.execute('SET CONSTRAINTS '
-                   'pgcontents.directories_parent_user_id_fkey DEFERRED')
+    # Overwriting existing directories is disallowed.
+    if _dir_exists(db, user_id, new_db_path):
+        raise DirectoryExists(new_api_path)
 
-        # Update name column for the directory that's being renamed
-        db.execute(
-            directories.update().where(
-                and_(
-                    directories.c.user_id == user_id,
-                    directories.c.name == old_db_path,
-                )
-            ).values(
-                name=new_db_path,
+    # Set this foreign key constraint to deferred so it's not violated
+    # when we run the first statement to update the name of the directory.
+    db.execute('SET CONSTRAINTS '
+               'pgcontents.directories_parent_user_id_fkey DEFERRED')
+
+    # Update name column for the directory that's being renamed
+    db.execute(
+        directories.update().where(
+            and_(
+                directories.c.user_id == user_id,
+                directories.c.name == old_db_path,
             )
+        ).values(
+            name=new_db_path,
         )
+    )
 
-        # Update the name and parent_name of any descendant directories.  Do
-        # this in a single statement so the non-deferrable check constraint
-        # is satisfied.
-        db.execute(
-            directories.update().where(
-                and_(
-                    directories.c.user_id == user_id,
-                    directories.c.name.startswith(old_db_path),
-                    directories.c.parent_name.startswith(old_db_path),
-                )
-            ).values(
-                name=func.concat(
-                    new_db_path,
-                    func.right(directories.c.name, -func.length(old_db_path))
-                ),
-                parent_name=func.concat(
-                    new_db_path,
-                    func.right(
-                        directories.c.parent_name,
-                        -func.length(old_db_path)
-                    )
-                ),
+    # Update the name and parent_name of any descendant directories.  Do
+    # this in a single statement so the non-deferrable check constraint
+    # is satisfied.
+    db.execute(
+        directories.update().where(
+            and_(
+                directories.c.user_id == user_id,
+                directories.c.name.startswith(old_db_path),
+                directories.c.parent_name.startswith(old_db_path),
             )
+        ).values(
+            name=func.concat(
+                new_db_path,
+                func.right(directories.c.name, -func.length(old_db_path))
+            ),
+            parent_name=func.concat(
+                new_db_path,
+                func.right(
+                    directories.c.parent_name,
+                    -func.length(old_db_path)
+                )
+            ),
         )
+    )
+
 
 def check_content(content, max_size_bytes):
     """

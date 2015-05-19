@@ -25,15 +25,16 @@ def main():
 
     setup(
         name='pgcontents',
-        version='0.0.2',
+        version='0.1',
         description="A Postgres-backed ContentsManager for IPython.",
         author="Scott Sanderson",
         author_email="ssanderson@quantopian.com",
         packages=[
             'pgcontents',
-            'pgcontents/utils/',
             'pgcontents/alembic',
             'pgcontents/alembic/versions',
+            'pgcontents/tests/',
+            'pgcontents/utils/',
         ],
         license='Apache 2.0',
         include_package_data=True,
