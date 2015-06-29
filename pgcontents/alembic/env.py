@@ -1,7 +1,12 @@
 from __future__ import with_statement
 from alembic import context
-from sqlalchemy import engine_from_config, pool
 from logging.config import fileConfig
+from sqlalchemy import engine_from_config, pool
+from os.path import dirname, abspath
+
+import sys
+
+from pgcontents.schema import metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -15,10 +20,8 @@ fileConfig(config.config_file_name)
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from os.path import dirname, abspath
-import sys
 sys.path.append(dirname(dirname(dirname(abspath(__file__)))))
-from pgcontents.schema import metadata
+
 target_metadata = metadata
 
 # other values from the config, defined by the needs of env.py,

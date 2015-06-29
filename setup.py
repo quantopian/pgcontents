@@ -20,7 +20,9 @@ def main():
     reqs_file = join(dirname(__file__), 'requirements.txt')
     with open(reqs_file) as f:
         requirements = [
-            req for req in f.readlines() if not req.strip().startswith('-e')
+            req.replace('==', '>=')
+            for req in f.readlines()
+            if not req.strip().startswith('-e')
         ]
 
     setup(
