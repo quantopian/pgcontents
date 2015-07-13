@@ -24,7 +24,7 @@ def temp_alembic_ini(alembic_dir_location, sqlalchemy_url):
         with open(alembic_ini_filename, 'w') as f:
             f.write(
                 ALEMBIC_INI_TEMPLATE.format(
-                    alembic_dir_location=ALEMBIC_DIR_LOCATION,
+                    alembic_dir_location=alembic_dir_location,
                     sqlalchemy_url=sqlalchemy_url,
                 )
             )
