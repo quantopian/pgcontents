@@ -93,7 +93,7 @@ def init(db_url, revision, prompt):
     click.echo("Initializing pgcontents...")
     if prompt:
         click.confirm(CONFIRM_MIGRATION, abort=True)
-        upgrade(db_url, revision)
+    upgrade(db_url, revision)
 
     click.echo('Initialization completed successfully.')
 
