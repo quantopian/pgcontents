@@ -24,7 +24,6 @@ from .query import (
     latest_remote_checkpoints,
     list_remote_checkpoints,
     move_remote_checkpoints,
-    move_single_remote_checkpoint,
     purge_remote_checkpoints,
     save_remote_checkpoint,
 )
