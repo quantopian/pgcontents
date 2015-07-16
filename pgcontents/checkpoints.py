@@ -61,14 +61,6 @@ class PostgresCheckpoints(PostgresManagerMixin,
             return save_remote_checkpoint(db, self.user_id, path, b64_content)
 
     @outside_root_to_404
-    def rename_checkpoint(self, checkpoint_id, old_path, new_path):
-        """Rename a checkpoint from old_path to new_path."""
-        with self.engine.begin() as db:
-            return move_single_remote_checkpoint(
-                db, old_path, new_path, checkpoint_id,
-            )
-
-    @outside_root_to_404
     def delete_checkpoint(self, checkpoint_id, path):
         """delete a checkpoint for a file"""
         with self.engine.begin() as db:
