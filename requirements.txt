@@ -4,7 +4,6 @@ MarkupSafe==0.23
 Pygments==2.0.1
 SQLAlchemy==1.0.5
 alembic==0.7.6
-argparse==1.2.1
 backports.ssl-match-hostname==3.4.0.2
 certifi==14.05.14
 fancycompleter==0.4
