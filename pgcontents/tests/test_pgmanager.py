@@ -183,7 +183,7 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         self.set_pgmgr_attribute('max_file_size_bytes', max_size)
 
         good = 'a' * 51
-        self.assertEqual(len(b64encode(good)), max_size)
+        self.assertEqual(len(b64encode(good.encode('utf-8'))), max_size)
         cm.save(
             model={
                 'content': good,
@@ -196,7 +196,7 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         self.assertEqual(result['content'], good)
 
         bad = 'a' * 52
-        self.assertGreater(bad, max_size)
+        self.assertGreater(len(b64encode(bad.encode('utf-8'))), max_size)
         with assertRaisesHTTPError(self, 413):
             cm.save(
                 model={
