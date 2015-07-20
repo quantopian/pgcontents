@@ -1,33 +1,16 @@
 from __future__ import print_function
 from setuptools import setup
-from os.path import join, dirname
-import sys
-
-
-def fail(msg):
-    print(msg, file=sys.stderr)
-    sys.exit(1)
+from os.path import join, dirname, abspath
 
 
 def main():
-    try:
-        import IPython
-        if IPython.version_info[0] < 3:
-            fail("PGContents requires IPython 3.0 or greater.")
-    except ImportError:
-        fail("PGContents requires IPython.")
-
-    reqs_file = join(dirname(__file__), 'requirements.txt')
+    reqs_file = join(dirname(abspath(__file__)), 'requirements.txt')
     with open(reqs_file) as f:
-        requirements = [
-            req.replace('==', '>=')
-            for req in f.readlines()
-            if not req.strip().startswith('-e')
-        ]
+        requirements = [req.strip() for req in f.readlines()]
 
     setup(
         name='pgcontents',
-        version='0.1',
+        version='0.2',
         description="A Postgres-backed ContentsManager for IPython.",
         author="Scott Sanderson",
         author_email="ssanderson@quantopian.com",
