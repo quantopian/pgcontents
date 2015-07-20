@@ -1,0 +1,17 @@
+language: python
+sudo: false
+matrix:
+  include:
+    - python: 2.7
+    - python: 3.4
+addons:
+  postgresql: "9.3"
+
+install:
+  - python setup.py install
+  - pip install -r requirements_dev.txt
+
+before_script:
+  - psql -c 'create database pgcontents_testing;' -U postgres
+script:
+  nosetests pgcontents/tests
