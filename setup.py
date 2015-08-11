@@ -1,6 +1,14 @@
 from __future__ import print_function
 from setuptools import setup
 from os.path import join, dirname, abspath
+import sys
+
+
+long_description = ''
+
+if 'upload' in sys.argv or '--long-description' in sys.argv:
+    with open('README.rst') as f:
+        long_description = f.read()
 
 
 def main():
@@ -12,6 +20,7 @@ def main():
         name='pgcontents',
         version='0.2',
         description="A Postgres-backed ContentsManager for IPython.",
+        long_description=long_description,
         author="Scott Sanderson",
         author_email="ssanderson@quantopian.com",
         packages=[
