@@ -58,6 +58,7 @@ from .query import (
     file_exists,
     get_directory,
     get_file,
+    get_file_id,
     purge_user,
     rename_directory,
     rename_file,
@@ -156,6 +157,20 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         except KeyError:
             raise ValueError("Unknown type passed: '{}'".format(type))
         return fn(path=path, content=content, format=format)
+
+    @outside_root_to_404
+    def get_file_id(self, path):
+        """
+        Get the id of a file in the database.  This function is specific to
+        this implementation of ContentsManager and is not in the base class.
+        """
+        with self.engine.begin() as db:
+            try:
+                file_id = get_file_id(db, self.user_id, path)
+            except NoSuchFile:
+                self.no_such_entity(path)
+
+        return file_id
 
     def _get_notebook(self, path, content, format):
         """

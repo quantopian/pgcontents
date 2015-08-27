@@ -83,6 +83,12 @@ class PostgresTestCase(PostgresContentsManagerTestCase):
             managers={'': self._pgmanager}
         )
 
+    # HybridContentsManager is not expected to dispatch calls to get_file_id
+    # because PostgresContentsManager is the only contents manager that
+    # implements it.
+    def test_get_file_id(self):
+        pass
+
     def set_pgmgr_attribute(self, name, value):
         setattr(self._pgmanager, name, value)
 
