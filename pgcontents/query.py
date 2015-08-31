@@ -299,6 +299,21 @@ def _file_default_fields():
     ]
 
 
+def _get_file(db, user_id, api_path, query_fields):
+    """
+    Get file data for the given user_id, path, and query_fields.  The
+    query_fields parameter specifies which database fields should be
+    included in the returned file data.
+    """
+    result = db.execute(
+        _select_file(user_id, api_path, query_fields, limit=1),
+    ).first()
+
+    if result is None:
+        raise NoSuchFile(api_path)
+    return to_dict(query_fields, result)
+
+
 def get_file(db, user_id, api_path, include_content):
     """
     Get file data for the given user_id and path.
@@ -309,13 +324,15 @@ def get_file(db, user_id, api_path, include_content):
     if include_content:
         query_fields.append(files.c.content)
 
-    result = db.execute(
-        _select_file(user_id, api_path, query_fields, limit=1),
-    ).first()
+    return _get_file(db, user_id, api_path, query_fields)
 
-    if result is None:
-        raise NoSuchFile(api_path)
-    return to_dict(query_fields, result)
+
+def get_file_id(db, user_id, api_path):
+    """
+    Get the value in the 'id' column for the file with the given
+    user_id and path.
+    """
+    return _get_file(db, user_id, api_path, [files.c.id])['id']
 
 
 def delete_file(db, user_id, api_path):

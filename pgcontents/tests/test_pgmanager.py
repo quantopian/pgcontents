@@ -121,6 +121,27 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         renamed = cm.get(new_path)
         self.assertGreater(renamed['last_modified'], saved['last_modified'])
 
+    def test_get_file_id(self):
+        cm = self.contents_manager
+
+        # Create a new notebook.
+        nb, name, path = self.new_notebook()
+        model = cm.get(path)
+
+        # Make sure we can get the id and it's not none.
+        id_ = cm.get_file_id(path)
+        self.assertIsNotNone(id_)
+
+        # Make sure the id stays the same after we edit and save.
+        self.add_code_cell(model['content'])
+        cm.save(model, path)
+        self.assertEqual(id_, cm.get_file_id(path))
+
+        # Make sure the id stays the same after a rename.
+        updated_path = "updated_name.ipynb"
+        cm.rename(path, updated_path)
+        self.assertEqual(id_, cm.get_file_id(updated_path))
+
     def test_rename_directory(self):
         """
         Create a directory hierarchy that looks like:
