@@ -4,8 +4,12 @@ Multi-backend ContentsManager.
 from __future__ import unicode_literals
 
 from six import iteritems
-from IPython.html.services.contents.manager import ContentsManager
-from IPython.utils.traitlets import Dict
+try:
+    from notebook.services.contents.manager import ContentsManager
+    from traitlets import Dict
+except ImportError:
+    from IPython.html.services.contents.manager import ContentsManager
+    from IPython.utils.traitlets import Dict
 from tornado.web import HTTPError
 
 from .api_utils import (

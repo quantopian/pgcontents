@@ -8,12 +8,20 @@ from sqlalchemy import (
 from sqlalchemy.engine.base import Engine
 from tornado.web import HTTPError
 
-from IPython.utils.traitlets import (
-    Bool,
-    Instance,
-    HasTraits,
-    Unicode,
-)
+try:
+    from traitlets import (
+        Bool,
+        Instance,
+        HasTraits,
+        Unicode,
+    )
+except ImportError:
+    from IPython.utils.traitlets import (
+        Bool,
+        Instance,
+        HasTraits,
+        Unicode,
+    )
 
 from .query import ensure_db_user
 
