@@ -4,12 +4,16 @@ An IPython FileContentsManager that uses Postgres for checkpoints.
 from __future__ import unicode_literals
 
 try:
-    from notebook.services.contents.checkpoints import GenericCheckpointsMixin
+    from notebook.services.contents.checkpoints import (
+        GenericCheckpointsMixin,
+    )
     from notebook.services.contents.manager import (
         Checkpoints,
     )
 except ImportError:
-    from IPython.html.services.contents.checkpoints import GenericCheckpointsMixin
+    from IPython.html.services.contents.checkpoints import (
+        GenericCheckpointsMixin,
+    )
     from IPython.html.services.contents.manager import (
         Checkpoints,
     )
