@@ -20,7 +20,12 @@ from __future__ import unicode_literals
 from base64 import b64encode
 from itertools import combinations
 
-from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
+try:
+    from notebook.services.contents.tests.test_manager import \
+        TestContentsManager  # noqa
+except ImportError:
+    from IPython.html.services.contents.tests.test_manager import \
+        TestContentsManager  # noqa
 
 from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (

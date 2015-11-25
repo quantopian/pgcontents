@@ -1,15 +1,18 @@
 language: python
 sudo: false
-matrix:
-  include:
-    - python: 2.7
-    - python: 3.4
+python:
+  - "2.7"
+  - "3.4"
+env:
+  - IPYTHON=ipython3
+  - IPYTHON=ipython4
 addons:
   postgresql: "9.3"
 
 install:
-  - python setup.py install
+  - pip install -r .travis-$IPYTHON-requirements.txt
   - pip install -r requirements_dev.txt
+  - pip install -e .
 
 before_script:
   - flake8 pgcontents

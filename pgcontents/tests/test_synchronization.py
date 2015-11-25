@@ -4,10 +4,17 @@ Tests for synchronization tools.
 from __future__ import unicode_literals
 from unittest import TestCase
 
-from IPython.nbformat.v4 import new_markdown_cell
-from IPython.nbformat.v4.rwbase import strip_transient
+try:
+    from nbformat.v4 import new_markdown_cell
+    from nbformat.v4.rwbase import strip_transient
+    from notebook.services.contents.filemanager import \
+        FileContentsManager
+except ImportError:
+    from IPython.nbformat.v4 import new_markdown_cell
+    from IPython.nbformat.v4.rwbase import strip_transient
+    from IPython.html.services.contents.filemanager import \
+        FileContentsManager
 from IPython.utils.tempdir import TemporaryDirectory
-from IPython.html.services.contents.filemanager import FileContentsManager
 from six import iteritems
 
 from ..checkpoints import PostgresCheckpoints
