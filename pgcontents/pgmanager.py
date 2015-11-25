@@ -18,25 +18,20 @@ PostgreSQL implementation of IPython ContentsManager API.
 from __future__ import unicode_literals
 from itertools import chain
 
-try:
-    # ipython >= 4.0
-    from nbformat import (
-        from_dict,
-    )
-    from traitlets import (
-        Bool,
-        Integer,
-    )
-    from notebook.services.contents.manager import ContentsManager
-except ImportError:
-    from IPython.nbformat import (
-        from_dict,
-    )
-    from IPython.utils.traitlets import (
-        Bool,
-        Integer,
-    )
-    from IPython.html.services.contents.manager import ContentsManager
+import IPython
+if IPython.version_info[0] < 4:
+    import IPython.nbformat as nbformat
+    import IPython.utils.traitlets as traitlets
+    import IPython.html as notebook
+    
+from nbformat import (
+    from_dict,
+)
+from traitlets import (
+    Bool,
+    Integer,
+)
+from notebook.services.contents.manager import ContentsManager
 from tornado import web
 
 from .api_utils import (
