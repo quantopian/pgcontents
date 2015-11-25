@@ -17,9 +17,20 @@ from six import (
 )
 from unittest import TestCase
 
-from IPython.html.services.contents.filemanager import FileContentsManager
-from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
-from IPython.html.services.contents.tests.test_contents_api import APITest  # noqa
+try:
+    from notebook.services.contents.filemanager import \
+        FileContentsManager
+    from notebook.services.contents.tests.test_manager import \
+        TestContentsManager  # noqa
+    from notebook.services.contents.tests.test_contents_api import \
+        APITest  # noqa
+except ImportError:
+    from IPython.html.services.contents.filemanager import \
+        FileContentsManager
+    from IPython.html.services.contents.tests.test_manager import \
+        TestContentsManager  # noqa
+    from IPython.html.services.contents.tests.test_contents_api import \
+        APITest  # noqa
 from IPython.utils.tempdir import TemporaryDirectory
 
 from pgcontents.hybridmanager import HybridContentsManager
