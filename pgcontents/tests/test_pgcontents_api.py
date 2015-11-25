@@ -23,8 +23,8 @@ from base64 import (
 from dateutil.parser import parse
 from six import iteritems
 
-from IPython.config import Config
 try:
+    from traitlets.config import Config
     from notebook.services.contents.filemanager import \
         FileContentsManager
     from notebook.services.contents.filecheckpoints import \
@@ -33,6 +33,7 @@ try:
         APITest
     from notebook.utils import to_os_path
 except ImportError:
+    from IPython.config import Config
     from IPython.html.services.contents.filemanager import \
         FileContentsManager
     from IPython.html.services.contents.filecheckpoints import \
