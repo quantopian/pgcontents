@@ -8,13 +8,20 @@ from getpass import getuser
 from itertools import starmap
 import posixpath
 from unicodedata import normalize
-
-from IPython.nbformat.v4.nbbase import (
-    new_code_cell,
-    new_markdown_cell,
-    new_notebook,
-    new_raw_cell,
-)
+try:
+    from nbformat.v4.nbbase import (
+        new_code_cell,
+        new_markdown_cell,
+        new_notebook,
+        new_raw_cell,
+    )
+except ImportError:
+    from IPython.nbformat.v4.nbbase import (
+        new_code_cell,
+        new_markdown_cell,
+        new_notebook,
+        new_raw_cell,
+    )
 from IPython.utils import py3compat
 from sqlalchemy import create_engine
 from tornado.web import HTTPError
