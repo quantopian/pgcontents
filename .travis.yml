@@ -1,12 +1,11 @@
 language: python
 sudo: false
-matrix:
-  include:
-    - python: 2.7
-    - python: 3.4
-  env:
-    - IPYTHON=ipython3
-    - IPYTHON=ipython4
+python:
+  - "2.7"
+  - "3.4"
+env:
+  - IPYTHON=ipython3
+  - IPYTHON=ipython4
 addons:
   postgresql: "9.3"
 
