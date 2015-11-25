@@ -9,10 +9,10 @@ from __future__ import (
 
 from IPython.utils.path import ensure_dir_exists
 try:
-    from notebook.services.contents.filemanager import \ 
+    from notebook.services.contents.filemanager import \
         FileContentsManager
 except ImportError:
-    from IPython.html.services.contents.filemanager import \ 
+    from IPython.html.services.contents.filemanager import \
         FileContentsManager
 
 from ..checkpoints import PostgresCheckpoints
