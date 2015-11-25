@@ -12,7 +12,7 @@ addons:
 install:
   - pip install -r .travis-$IPYTHON-requirements.txt
   - pip install -r requirements_dev.txt
-  - pip install -e .
+  - pip install --no-deps -e .
 
 before_script:
   - flake8 pgcontents
