@@ -19,9 +19,9 @@ from six import iteritems
 
 from ..checkpoints import PostgresCheckpoints
 from .utils import (
+    clear_test_db,
     _norm_unicode,
-    drop_testing_db_tables,
-    migrate_testing_db,
+    remigrate_test_schema,
     populate,
     TEST_DB_URL,
 )
@@ -30,13 +30,12 @@ from ..utils.sync import (
     download_checkpoints,
 )
 
+setup_module = remigrate_test_schema
+
 
 class TestUploadDownload(TestCase):
 
     def setUp(self):
-
-        drop_testing_db_tables()
-        migrate_testing_db()
 
         self.td = TemporaryDirectory()
         self.checkpoints = PostgresCheckpoints(
@@ -52,6 +51,7 @@ class TestUploadDownload(TestCase):
 
     def tearDown(self):
         self.td.cleanup()
+        clear_test_db()
 
     def add_markdown_cell(self, path):
         # Load and update

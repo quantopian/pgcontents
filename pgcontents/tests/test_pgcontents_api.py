@@ -60,19 +60,21 @@ from ..query import (
     save_file,
 )
 from .utils import (
+    clear_test_db,
     _norm_unicode,
-    drop_testing_db_tables,
-    migrate_testing_db,
+    remigrate_test_schema,
     TEST_DB_URL,
 )
 from ..utils.sync import walk, walk_dirs
+
+
+setup_module = remigrate_test_schema
 
 
 class _APITestBase(APITest):
     """
     APITest that also runs a test for our implementation of `walk`.
     """
-
     def test_walk(self):
         """
         Test ContentsManager.walk.
@@ -185,16 +187,17 @@ class PostgresContentsAPITest(_APITestBase):
     # Don't support hidden directories.
     hidden_dirs = []
 
-    @classmethod
-    def setup_class(cls):
-        drop_testing_db_tables()
-        migrate_testing_db()
-        super(PostgresContentsAPITest, cls).setup_class()
+    def setUp(self):
+        # This has to happen before the super call because the base class setup
+        # calls our make_* functions, which require a user or else we violate
+        # foreign-key constraints.
+        self.pg_manager.ensure_user()
+        self.pg_manager.ensure_root_directory()
+        super(PostgresContentsAPITest, self).setUp()
 
-    @classmethod
-    def teardown_class(cls):
-        drop_testing_db_tables()
-        super(PostgresContentsAPITest, cls).teardown_class()
+    def tearDown(self):
+        super(PostgresContentsAPITest, self).tearDown()
+        clear_test_db()
 
     @property
     def pg_manager(self):
@@ -283,8 +286,6 @@ class PostgresContentsFileCheckpointsAPITest(PostgresContentsAPITest):
 
     @classmethod
     def setup_class(cls):
-        drop_testing_db_tables()
-        migrate_testing_db()
         cls.td = TemporaryDirectory()
         cls.config.GenericFileCheckpoints.root_dir = cls.td.name
         super(PostgresContentsFileCheckpointsAPITest, cls).setup_class()
@@ -293,7 +294,6 @@ class PostgresContentsFileCheckpointsAPITest(PostgresContentsAPITest):
     def teardown_class(cls):
         super(PostgresContentsFileCheckpointsAPITest, cls).teardown_class()
         cls.td.cleanup()
-        drop_testing_db_tables()
 
 
 class PostgresCheckpointsAPITest(_APITestBase):
@@ -311,25 +311,14 @@ class PostgresCheckpointsAPITest(_APITestBase):
     def checkpoints(self):
         return self.notebook.contents_manager.checkpoints
 
-    @classmethod
-    def setup_class(cls):
-        drop_testing_db_tables()
-        migrate_testing_db()
-        super(PostgresCheckpointsAPITest, cls).setup_class()
-
-    @classmethod
-    def teardown_class(cls):
-        super(PostgresCheckpointsAPITest, cls).teardown_class()
-        drop_testing_db_tables()
-
     def setUp(self):
         super(PostgresCheckpointsAPITest, self).setUp()
-        self.checkpoints.purge_db()
         self.checkpoints.ensure_user()
 
     def tearDown(self):
-        super(PostgresCheckpointsAPITest, self).tearDown()
         self.checkpoints.purge_db()
+        clear_test_db()
+        super(PostgresCheckpointsAPITest, self).tearDown()
 
     def test_pgcheckpoints_is_used(self):
         self.assertIsInstance(self.checkpoints, PostgresCheckpoints)
@@ -347,9 +336,6 @@ class HybridContentsPGRootAPITest(PostgresContentsAPITest):
 
     @classmethod
     def setup_class(cls):
-
-        drop_testing_db_tables()
-        migrate_testing_db()
         cls.td = TemporaryDirectory()
 
         cls.config = Config()
@@ -363,11 +349,6 @@ class HybridContentsPGRootAPITest(PostgresContentsAPITest):
             cls.files_prefix: {'root_dir': cls.td.name},
         }
         super(HybridContentsPGRootAPITest, cls).setup_class()
-
-    @classmethod
-    def teardown_class(cls):
-        super(HybridContentsPGRootAPITest, cls).teardown_class()
-        drop_testing_db_tables()
 
     @property
     def pg_manager(self):

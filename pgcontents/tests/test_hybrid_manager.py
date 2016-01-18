@@ -39,10 +39,14 @@ from pgcontents.pgmanager import PostgresContentsManager
 from .test_pgmanager import PostgresContentsManagerTestCase
 from .utils import (
     assertRaisesHTTPError,
+    clear_test_db,
     drop_testing_db_tables,
-    migrate_testing_db,
+    remigrate_test_schema,
     TEST_DB_URL,
 )
+
+
+setup_module = remigrate_test_schema
 
 
 def _make_dir(contents_manager, api_path):
@@ -79,10 +83,6 @@ class FileTestCase(TestContentsManager):
 class PostgresTestCase(PostgresContentsManagerTestCase):
 
     def setUp(self):
-
-        drop_testing_db_tables()
-        migrate_testing_db()
-
         self._pgmanager = PostgresContentsManager(
             user_id='test',
             db_url=TEST_DB_URL,
@@ -102,10 +102,6 @@ class PostgresTestCase(PostgresContentsManagerTestCase):
 
     def set_pgmgr_attribute(self, name, value):
         setattr(self._pgmanager, name, value)
-
-    def tearDown(self):
-        drop_testing_db_tables()
-        migrate_testing_db()
 
     def make_dir(self, api_path):
         self.contents_manager.new(

@@ -23,11 +23,13 @@ except ImportError:
         new_raw_cell,
     )
 from IPython.utils import py3compat
+from nose.tools import nottest
 from sqlalchemy import create_engine
 from tornado.web import HTTPError
 
 
 from ..api_utils import api_path_join
+from ..schema import metadata
 from ..utils.migrate import upgrade
 
 TEST_DB_URL = "postgresql://{user}@/pgcontents_testing".format(
@@ -51,6 +53,35 @@ def assertRaisesHTTPError(testcase, status, msg=None):
         testcase.fail(msg)
 
 
+_tables = (
+    'pgcontents.remote_checkpoints',
+    'pgcontents.files',
+    'pgcontents.directories',
+    'pgcontents.users',
+)
+unexpected_tables = set(metadata.tables) - set(_tables)
+if unexpected_tables:
+    raise Exception("Unexpected tables in metadata: %s" % unexpected_tables)
+
+
+@nottest
+def clear_test_db():
+    engine = create_engine(TEST_DB_URL)
+    with engine.connect() as conn:
+        for table in map(metadata.tables.__getitem__, _tables):
+            conn.execute(table.delete())
+
+
+@nottest
+def remigrate_test_schema():
+    """
+    Drop recreate the test db schema.
+    """
+    drop_testing_db_tables()
+    migrate_testing_db()
+
+
+@nottest
 def drop_testing_db_tables():
     """
     Drop all tables from the testing db.
@@ -64,6 +95,7 @@ def drop_testing_db_tables():
     trans.commit()
 
 
+@nottest
 def migrate_testing_db(revision='head'):
     """
     Migrate the testing db to the latest alembic revision.
@@ -71,6 +103,7 @@ def migrate_testing_db(revision='head'):
     upgrade(TEST_DB_URL, revision)
 
 
+@nottest
 def test_notebook(name):
     """
     Make a test notebook for the given name.
