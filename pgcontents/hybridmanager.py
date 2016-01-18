@@ -4,12 +4,6 @@ Multi-backend ContentsManager.
 from __future__ import unicode_literals
 
 from six import iteritems
-try:
-    from notebook.services.contents.manager import ContentsManager
-    from traitlets import Dict
-except ImportError:
-    from IPython.html.services.contents.manager import ContentsManager
-    from IPython.utils.traitlets import Dict
 from tornado.web import HTTPError
 
 from .api_utils import (
@@ -17,6 +11,7 @@ from .api_utils import (
     normalize_api_path,
     outside_root_to_404,
 )
+from .utils.ipycompat import ContentsManager, Dict
 
 
 @outside_root_to_404

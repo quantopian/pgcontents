@@ -23,24 +23,6 @@ from base64 import (
 from dateutil.parser import parse
 from six import iteritems
 
-try:
-    from traitlets.config import Config
-    from notebook.services.contents.filemanager import \
-        FileContentsManager
-    from notebook.services.contents.filecheckpoints import \
-        GenericFileCheckpoints
-    from notebook.services.contents.tests.test_contents_api import \
-        APITest
-    from notebook.utils import to_os_path
-except ImportError:
-    from IPython.config import Config
-    from IPython.html.services.contents.filemanager import \
-        FileContentsManager
-    from IPython.html.services.contents.filecheckpoints import \
-        GenericFileCheckpoints
-    from IPython.html.services.contents.tests.test_contents_api import \
-        APITest
-    from IPython.html.utils import to_os_path
 from IPython.utils.tempdir import TemporaryDirectory
 from requests import HTTPError
 
@@ -64,6 +46,9 @@ from .utils import (
     _norm_unicode,
     remigrate_test_schema,
     TEST_DB_URL,
+)
+from ..utils.ipycompat import (
+    APITest, Config, FileContentsManager, GenericFileCheckpoints, to_os_path,
 )
 from ..utils.sync import walk, walk_dirs
 

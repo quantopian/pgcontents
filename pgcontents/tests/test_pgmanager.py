@@ -20,12 +20,6 @@ from __future__ import unicode_literals
 from base64 import b64encode
 from itertools import combinations
 
-try:
-    from notebook.services.contents.tests.test_manager import \
-        TestContentsManager  # noqa
-except ImportError:
-    from IPython.html.services.contents.tests.test_manager import \
-        TestContentsManager  # noqa
 
 from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (
@@ -34,6 +28,7 @@ from .utils import (
     TEST_DB_URL,
     remigrate_test_schema,
 )
+from ..utils.ipycompat import TestContentsManager
 
 
 setup_module = remigrate_test_schema

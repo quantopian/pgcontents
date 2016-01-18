@@ -16,21 +16,6 @@ from six import (
     itervalues,
 )
 from unittest import TestCase
-
-try:
-    from notebook.services.contents.filemanager import \
-        FileContentsManager
-    from notebook.services.contents.tests.test_manager import \
-        TestContentsManager  # noqa
-    from notebook.services.contents.tests.test_contents_api import \
-        APITest  # noqa
-except ImportError:
-    from IPython.html.services.contents.filemanager import \
-        FileContentsManager
-    from IPython.html.services.contents.tests.test_manager import \
-        TestContentsManager  # noqa
-    from IPython.html.services.contents.tests.test_contents_api import \
-        APITest  # noqa
 from IPython.utils.tempdir import TemporaryDirectory
 
 from pgcontents.hybridmanager import HybridContentsManager
@@ -39,11 +24,10 @@ from pgcontents.pgmanager import PostgresContentsManager
 from .test_pgmanager import PostgresContentsManagerTestCase
 from .utils import (
     assertRaisesHTTPError,
-    clear_test_db,
-    drop_testing_db_tables,
     remigrate_test_schema,
     TEST_DB_URL,
 )
+from ..utils.ipycompat import APITest, FileContentsManager, TestContentsManager
 
 
 setup_module = remigrate_test_schema

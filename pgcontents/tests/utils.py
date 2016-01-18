@@ -8,28 +8,20 @@ from getpass import getuser
 from itertools import starmap
 import posixpath
 from unicodedata import normalize
-try:
-    from nbformat.v4.nbbase import (
-        new_code_cell,
-        new_markdown_cell,
-        new_notebook,
-        new_raw_cell,
-    )
-except ImportError:
-    from IPython.nbformat.v4.nbbase import (
-        new_code_cell,
-        new_markdown_cell,
-        new_notebook,
-        new_raw_cell,
-    )
+
 from IPython.utils import py3compat
 from nose.tools import nottest
 from sqlalchemy import create_engine
 from tornado.web import HTTPError
 
-
 from ..api_utils import api_path_join
 from ..schema import metadata
+from ..utils.ipycompat import (
+    new_code_cell,
+    new_markdown_cell,
+    new_notebook,
+    new_raw_cell,
+)
 from ..utils.migrate import upgrade
 
 TEST_DB_URL = "postgresql://{user}@/pgcontents_testing".format(
