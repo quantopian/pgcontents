@@ -4,18 +4,15 @@ python:
   - "2.7"
   - "3.4"
 env:
-  - IPYTHON=ipython3
-  - IPYTHON=ipython4
+  - IPYTHON=3
+  - IPYTHON=4
 addons:
   postgresql: "9.3"
-
-install:
-  - pip install -r .travis-$IPYTHON-requirements.txt
-  - pip install -r requirements_dev.txt
-  - pip install --no-deps -e .
 
 before_script:
   - flake8 pgcontents
   - psql -c 'create database pgcontents_testing;' -U postgres
 script:
-  nosetests pgcontents/tests
+  if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-ipython-$IPYTHON; fi
+  if [[ $TRAVIS_PYTHON_VERSION = '3.4' ]]; then tox -e py34-ipython-$IPYTHON; fi
+

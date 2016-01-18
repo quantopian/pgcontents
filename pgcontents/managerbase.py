@@ -12,7 +12,6 @@ from .query import ensure_db_user
 from .utils.ipycompat import Bool, Instance, HasTraits, Unicode
 
 
-
 class PostgresManagerMixin(HasTraits):
     """
     Shared  for Postgres-backed ContentsManagers.
