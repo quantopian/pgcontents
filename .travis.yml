@@ -11,6 +11,7 @@ addons:
   postgresql: "9.3"
 
 before_script:
+  - pip install tox
   - psql -c 'create database pgcontents_testing;' -U postgres
 
 script:
