@@ -9,11 +9,12 @@ Getting Started
 ---------------
 **Prerequisites:**
  - Write access to an empty `PostgreSQL <http://www.postgresql.org>`_ database.
- - A Python installation with `IPython <https://github.com/ipython/ipython>`_ 3.2.x.
+ - A Python installation with `IPython <https://github.com/ipython/ipython>`_ 3.x 
+   or `Jupyter Notebook <https://github.com/jupyter/notebook>`_ >= 4.0.
 
 **Installation:**
 
 0. Install `pgcontents` from PyPI via `pip install pgcontents`.
 1. Run `pgcontents init` to configure your database.  You will be prompted for a database URL for pgcontents to use for storage.
-2. Configure IPython Notebook to use pgcontents as its storage backend.  This can be done from the command line or by modifying your `ipython_notebook_config.py` file.  For a standard IPython installation on Unix-like systems, your profile will be located located at `~/.ipython/profile_default/ipython_notebook_config.py`. See the `examples` directory for example configuration files.
+2. Configure IPython/Jupyter to use pgcontents as its storage backend.  This can be done from the command line or by modifying your notebook config file.  For IPython 3.x on a Unix-like system, your notebok config will be located located at ``~/.ipython/profile_default/ipython_notebook_config.py``.  For Jupyter Notebook, it will will be located at ``~/.jupyter/jupyter_notebook_config.py``. See the ``examples`` directory for example configuration files.
 3. Enjoy your filesystem-free IPython experience!
