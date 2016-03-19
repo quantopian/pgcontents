@@ -20,29 +20,37 @@ from __future__ import unicode_literals
 from base64 import b64encode
 from itertools import combinations
 
-from IPython.html.services.contents.tests.test_manager import TestContentsManager  # noqa
 
 from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (
     assertRaisesHTTPError,
-    drop_testing_db_tables,
-    migrate_testing_db,
+    clear_test_db,
     TEST_DB_URL,
+    remigrate_test_schema,
 )
+from ..utils.ipycompat import TestContentsManager
+
+
+setup_module = remigrate_test_schema
 
 
 class PostgresContentsManagerTestCase(TestContentsManager):
 
-    def setUp(self):
-        drop_testing_db_tables()
-        migrate_testing_db()
+    @classmethod
+    def tearDownClass(cls):
+        # Override the superclass teardown.
+        pass
 
+    def setUp(self):
         self.contents_manager = PostgresContentsManager(
             user_id='test',
             db_url=TEST_DB_URL,
         )
         self.contents_manager.ensure_user()
         self.contents_manager.ensure_root_directory()
+
+    def tearDown(self):
+        clear_test_db()
 
     def set_pgmgr_attribute(self, name, value):
         """
@@ -94,10 +102,6 @@ class PostgresContentsManagerTestCase(TestContentsManager):
                     entry['path'],
                     '/'.join([api_path, 'nb.ipynb']),
                 )
-
-    def tearDown(self):
-        drop_testing_db_tables()
-        migrate_testing_db()
 
     def test_modified_date(self):
 

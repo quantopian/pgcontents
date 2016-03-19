@@ -1,5 +1,5 @@
 from __future__ import print_function
-from setuptools import setup
+from setuptools import setup, find_packages
 from os.path import join, dirname, abspath
 import sys
 
@@ -11,25 +11,24 @@ if 'upload' in sys.argv or '--long-description' in sys.argv:
         long_description = f.read()
 
 
-def main():
-    reqs_file = join(dirname(abspath(__file__)), 'requirements.txt')
+def read_requirements(basename):
+    reqs_file = join(dirname(abspath(__file__)), basename)
     with open(reqs_file) as f:
-        requirements = [req.strip() for req in f.readlines()]
+        return [req.strip() for req in f.readlines()]
+
+
+def main():
+    reqs = read_requirements('requirements.txt')
+    test_reqs = read_requirements('requirements_test.txt')
 
     setup(
         name='pgcontents',
         version='0.2.1',
-        description="A Postgres-backed ContentsManager for IPython.",
+        description="A Postgres-backed ContentsManager for IPython/Jupyter.",
         long_description=long_description,
         author="Scott Sanderson",
         author_email="ssanderson@quantopian.com",
-        packages=[
-            'pgcontents',
-            'pgcontents/alembic',
-            'pgcontents/alembic/versions',
-            'pgcontents/tests/',
-            'pgcontents/utils/',
-        ],
+        packages=find_packages(include='pgcontents.*'),
         license='Apache 2.0',
         include_package_data=True,
         zip_safe=False,
@@ -37,6 +36,7 @@ def main():
         classifiers=[
             'Development Status :: 3 - Alpha',
             'Framework :: IPython',
+            'Framework :: Jupyter',
             'License :: OSI Approved :: Apache Software License',
             'Natural Language :: English',
             'Operating System :: OS Independent',
@@ -45,7 +45,11 @@ def main():
             'Programming Language :: Python',
             'Topic :: Database',
         ],
-        install_requires=requirements,
+        install_requires=reqs,
+        extras_require={
+            'test': test_reqs,
+            'ipy4': 'notebook>=4.0',
+        },
         scripts=[
             'bin/pgcontents',
         ],

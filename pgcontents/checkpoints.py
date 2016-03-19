@@ -3,11 +3,6 @@ An IPython FileContentsManager that uses Postgres for checkpoints.
 """
 from __future__ import unicode_literals
 
-from IPython.html.services.contents.checkpoints import GenericCheckpointsMixin
-from IPython.html.services.contents.manager import (
-    Checkpoints,
-)
-
 from .api_utils import (
     _decode_unknown_from_base64,
     outside_root_to_404,
@@ -27,6 +22,7 @@ from .query import (
     purge_remote_checkpoints,
     save_remote_checkpoint,
 )
+from .utils.ipycompat import Checkpoints, GenericCheckpointsMixin
 
 
 class PostgresCheckpoints(PostgresManagerMixin,

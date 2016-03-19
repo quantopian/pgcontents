@@ -8,9 +8,9 @@ from __future__ import (
 
 
 from IPython.utils.path import ensure_dir_exists
-from IPython.html.services.contents.filemanager import FileContentsManager
 
 from ..checkpoints import PostgresCheckpoints
+from ..utils.ipycompat import FileContentsManager
 
 
 def create_user(db_url, user):

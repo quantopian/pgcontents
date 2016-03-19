@@ -8,14 +8,8 @@ from sqlalchemy import (
 from sqlalchemy.engine.base import Engine
 from tornado.web import HTTPError
 
-from IPython.utils.traitlets import (
-    Bool,
-    Instance,
-    HasTraits,
-    Unicode,
-)
-
 from .query import ensure_db_user
+from .utils.ipycompat import Bool, Instance, HasTraits, Unicode
 
 
 class PostgresManagerMixin(HasTraits):

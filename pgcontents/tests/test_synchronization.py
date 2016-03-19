@@ -4,17 +4,24 @@ Tests for synchronization tools.
 from __future__ import unicode_literals
 from unittest import TestCase
 
-from IPython.nbformat.v4 import new_markdown_cell
-from IPython.nbformat.v4.rwbase import strip_transient
+try:
+    from nbformat.v4 import new_markdown_cell
+    from nbformat.v4.rwbase import strip_transient
+    from notebook.services.contents.filemanager import \
+        FileContentsManager
+except ImportError:
+    from IPython.nbformat.v4 import new_markdown_cell
+    from IPython.nbformat.v4.rwbase import strip_transient
+    from IPython.html.services.contents.filemanager import \
+        FileContentsManager
 from IPython.utils.tempdir import TemporaryDirectory
-from IPython.html.services.contents.filemanager import FileContentsManager
 from six import iteritems
 
 from ..checkpoints import PostgresCheckpoints
 from .utils import (
+    clear_test_db,
     _norm_unicode,
-    drop_testing_db_tables,
-    migrate_testing_db,
+    remigrate_test_schema,
     populate,
     TEST_DB_URL,
 )
@@ -23,13 +30,12 @@ from ..utils.sync import (
     download_checkpoints,
 )
 
+setup_module = remigrate_test_schema
+
 
 class TestUploadDownload(TestCase):
 
     def setUp(self):
-
-        drop_testing_db_tables()
-        migrate_testing_db()
 
         self.td = TemporaryDirectory()
         self.checkpoints = PostgresCheckpoints(
@@ -45,6 +51,7 @@ class TestUploadDownload(TestCase):
 
     def tearDown(self):
         self.td.cleanup()
+        clear_test_db()
 
     def add_markdown_cell(self, path):
         # Load and update

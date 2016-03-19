@@ -11,12 +11,9 @@ from functools import wraps
 import mimetypes
 import posixpath
 
-from IPython.nbformat import (
-    reads,
-    writes,
-)
 from tornado.web import HTTPError
 from .error import PathOutsideRoot
+from .utils.ipycompat import reads, writes
 
 NBFORMAT_VERSION = 4
 
