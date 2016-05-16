@@ -35,6 +35,7 @@ from .error import (
     NoSuchCheckpoint,
     NoSuchDirectory,
     NoSuchFile,
+    RenameRoot,
 )
 from .schema import(
     directories,
@@ -406,6 +407,9 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
     """
     old_db_path = from_api_dirname(old_api_path)
     new_db_path = from_api_dirname(new_api_path)
+
+    if old_db_path == '/':
+        raise RenameRoot('Renaming the root directory is not permitted.')
 
     # Overwriting existing directories is disallowed.
     if _dir_exists(db, user_id, new_db_path):
