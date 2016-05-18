@@ -20,7 +20,6 @@ from __future__ import unicode_literals
 from base64 import b64encode
 from itertools import combinations
 
-
 from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (
     assertRaisesHTTPError,
@@ -177,6 +176,10 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         for src, dest in combinations(all_dirs, 2):
             with assertRaisesHTTPError(self, 409):
                 cm.rename(src, dest)
+
+        # Renaming the root directory should raise
+        with assertRaisesHTTPError(self, 409):
+            cm.rename('', 'baz')
 
         # Verify that we can't create a new notebook in the (nonexistent)
         # target directory

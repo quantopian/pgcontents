@@ -32,13 +32,14 @@ from .api_utils import (
 from .checkpoints import PostgresCheckpoints
 from .constants import UNLIMITED
 from .error import (
+    DirectoryExists,
     DirectoryNotEmpty,
     FileExists,
-    DirectoryExists,
     FileTooLarge,
     NoSuchDirectory,
     NoSuchFile,
     PathOutsideRoot,
+    RenameRoot,
 )
 from .managerbase import PostgresManagerMixin
 from .query import (
@@ -368,6 +369,8 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
                     self.no_such_entity(path)
             except (FileExists, DirectoryExists):
                 self.already_exists(path)
+            except RenameRoot as e:
+                self.do_409(str(e))
 
     def _delete_non_directory(self, path):
         with self.engine.begin() as db:
