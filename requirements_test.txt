@@ -7,4 +7,3 @@ pyflakes==0.9.2
 pep8==1.6.2
 mccabe==0.3.1
 flake8==2.2.5
-ipython[test]>=3.2.1
