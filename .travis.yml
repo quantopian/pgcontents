@@ -10,9 +10,8 @@ env:
 addons:
   postgresql: "9.3"
 
-before_script:
+install:
   - pip install tox
-  - psql -c 'create database pgcontents_testing;' -U postgres
 
 script:
   - if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-ipython$IPYTHON,flake8; fi
