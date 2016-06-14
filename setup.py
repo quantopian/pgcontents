@@ -36,7 +36,6 @@ def main():
         classifiers=[
             'Development Status :: 4 - Beta',
             'Framework :: IPython',
-            'Framework :: Jupyter',
             'License :: OSI Approved :: Apache Software License',
             'Natural Language :: English',
             'Operating System :: OS Independent',
