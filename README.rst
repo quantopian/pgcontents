@@ -14,7 +14,7 @@ Getting Started
 
 **Installation:**
 
-0. Install `pgcontents` from PyPI via `pip install pgcontents`.
-1. Run `pgcontents init` to configure your database.  You will be prompted for a database URL for pgcontents to use for storage.
+0. Install `pgcontents` from PyPI via `pip install pgcontents[ipy4]`. (This will install pgcontents in a manner compatible with a recent Jupyter Notebook version.  To install pgcontents with support for the legacy IPython 3.x series, run `pip install pgcontents[ipy3]`).
+1. Run `pgcontents init` to configure your database.  You will be prompted for a database URL for pgcontents to use for storage.  (Alternatively, you can set the PGCONTENTS_DB_URL environment variable, or pass `--db-url` on the command line).
 2. Configure IPython/Jupyter to use pgcontents as its storage backend.  This can be done from the command line or by modifying your notebook config file.  For IPython 3.x on a Unix-like system, your notebok config will be located located at ``~/.ipython/profile_default/ipython_notebook_config.py``.  For Jupyter Notebook, it will will be located at ``~/.jupyter/jupyter_notebook_config.py``. See the ``examples`` directory for example configuration files.
 3. Enjoy your filesystem-free IPython experience!
