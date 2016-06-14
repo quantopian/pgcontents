@@ -16,3 +16,7 @@ install:
 script:
   - if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-ipython$IPYTHON,flake8; fi
   - if [[ $TRAVIS_PYTHON_VERSION = '3.4' ]]; then tox -e py34-ipython$IPYTHON,flake8; fi
+
+branches:
+  only:
+    - master
