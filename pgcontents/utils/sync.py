@@ -24,7 +24,7 @@ def create_user(db_url, user):
     )
 
 
-def download_checkpoints(db_url, directory, user):
+def download_checkpoints(db_url, directory, user, crypto):
     """
     Download users' most recent checkpoints to the given directory.
     """
@@ -37,6 +37,7 @@ def download_checkpoints(db_url, directory, user):
         db_url=db_url,
         user_id=user,
         create_user_on_startup=False,
+        crypto=crypto,
     )
     cp_mgr.dump(contents_mgr)
     print("Done")

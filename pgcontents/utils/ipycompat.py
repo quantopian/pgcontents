@@ -37,6 +37,7 @@ if IPY3:
     )
     from IPython.nbformat.v4.rwbase import strip_transient
     from IPython.utils.traitlets import (
+        Any,
         Bool,
         Dict,
         Instance,
@@ -71,6 +72,7 @@ else:
     )
     from nbformat.v4.rwbase import strip_transient
     from traitlets import (
+        Any,
         Bool,
         Dict,
         Instance,
@@ -81,6 +83,7 @@ else:
 
 __all__ = [
     'APITest',
+    'Any',
     'Bool',
     'Checkpoints',
     'Config',

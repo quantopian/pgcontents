@@ -4,6 +4,7 @@ Utilities for testing.
 """
 from __future__ import unicode_literals
 from contextlib import contextmanager
+from cryptography.fernet import Fernet
 from getpass import getuser
 from itertools import starmap
 import posixpath
@@ -15,6 +16,7 @@ from sqlalchemy import create_engine
 from tornado.web import HTTPError
 
 from ..api_utils import api_path_join
+from ..crypto import FernetEncryption
 from ..schema import metadata
 from ..utils.ipycompat import (
     new_code_cell,
@@ -27,6 +29,10 @@ from ..utils.migrate import upgrade
 TEST_DB_URL = "postgresql://{user}@/pgcontents_testing".format(
     user=getuser(),
 )
+
+
+def make_fernet():
+    return FernetEncryption(Fernet(Fernet.generate_key()))
 
 
 def _norm_unicode(s):

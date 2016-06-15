@@ -40,7 +40,14 @@ class PostgresCheckpoints(PostgresManagerMixin,
         """
         b64_content = writes_base64(nb)
         with self.engine.begin() as db:
-            return save_remote_checkpoint(db, self.user_id, path, b64_content)
+            return save_remote_checkpoint(
+                db,
+                self.user_id,
+                path,
+                b64_content,
+                self.crypto.encrypt,
+                self.max_file_size_bytes,
+            )
 
     @outside_root_to_404
     def create_file_checkpoint(self, content, format, path):
@@ -53,7 +60,14 @@ class PostgresCheckpoints(PostgresManagerMixin,
         except ValueError as e:
             self.do_400(str(e))
         with self.engine.begin() as db:
-            return save_remote_checkpoint(db, self.user_id, path, b64_content)
+            return save_remote_checkpoint(
+                db,
+                self.user_id,
+                path,
+                b64_content,
+                self.crypto.encrypt,
+                self.max_file_size_bytes,
+            )
 
     @outside_root_to_404
     def delete_checkpoint(self, checkpoint_id, path):
@@ -71,6 +85,7 @@ class PostgresCheckpoints(PostgresManagerMixin,
                 self.user_id,
                 path,
                 checkpoint_id,
+                self.crypto.decrypt,
             )['content']
 
     @outside_root_to_404

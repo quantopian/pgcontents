@@ -24,6 +24,7 @@ from pgcontents.pgmanager import PostgresContentsManager
 from .test_pgmanager import PostgresContentsManagerTestCase
 from .utils import (
     assertRaisesHTTPError,
+    make_fernet,
     remigrate_test_schema,
     TEST_DB_URL,
 )
@@ -67,9 +68,11 @@ class FileTestCase(TestContentsManager):
 class PostgresTestCase(PostgresContentsManagerTestCase):
 
     def setUp(self):
+        self.crypto = make_fernet()
         self._pgmanager = PostgresContentsManager(
             user_id='test',
             db_url=TEST_DB_URL,
+            crypto=self.crypto,
         )
         self._pgmanager.ensure_user()
         self._pgmanager.ensure_root_directory()

@@ -18,6 +18,7 @@ from IPython.utils.tempdir import TemporaryDirectory
 from six import iteritems
 
 from ..checkpoints import PostgresCheckpoints
+from ..crypto import NoEncryption
 from .utils import (
     clear_test_db,
     _norm_unicode,
@@ -95,6 +96,7 @@ class TestUploadDownload(TestCase):
                 self.checkpoints.db_url,
                 td,
                 user='test',
+                crypto=NoEncryption(),
             )
 
             fm = FileContentsManager(root_dir=td)

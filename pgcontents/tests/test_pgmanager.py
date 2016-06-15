@@ -18,15 +18,18 @@ Run IPython's TestContentsManager using PostgresContentsManager.
 from __future__ import unicode_literals
 
 from base64 import b64encode
+from cryptography.fernet import Fernet
 from itertools import combinations
 
 from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (
     assertRaisesHTTPError,
     clear_test_db,
+    make_fernet,
     TEST_DB_URL,
     remigrate_test_schema,
 )
+from ..crypto import FernetEncryption
 from ..utils.ipycompat import TestContentsManager
 
 
@@ -41,9 +44,11 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         pass
 
     def setUp(self):
+        self.crypto = make_fernet()
         self.contents_manager = PostgresContentsManager(
             user_id='test',
             db_url=TEST_DB_URL,
+            crypto=self.crypto,
         )
         self.contents_manager.ensure_user()
         self.contents_manager.ensure_root_directory()
@@ -55,7 +60,8 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         """
         Overridable method for setting attributes on our pgmanager.
 
-        This exists so that HybridContentsManager can use
+        This exists so that we can re-use the tests here in
+        test_hybrid_manager.
         """
         setattr(self.contents_manager, name, value)
 
@@ -207,11 +213,16 @@ class PostgresContentsManagerTestCase(TestContentsManager):
     def test_max_file_size(self):
 
         cm = self.contents_manager
-        max_size = 68
+        max_size = 120
         self.set_pgmgr_attribute('max_file_size_bytes', max_size)
 
-        good = 'a' * 51
-        self.assertEqual(len(b64encode(good.encode('utf-8'))), max_size)
+        def size_in_db(s):
+            return len(self.crypto.encrypt(b64encode(s.encode('utf-8'))))
+
+        # max_file_size_bytes should be based on the size in the database, not
+        # the size of the input.
+        good = 'a' * 10
+        self.assertEqual(size_in_db(good), max_size)
         cm.save(
             model={
                 'content': good,
@@ -223,8 +234,8 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         result = cm.get('good.txt')
         self.assertEqual(result['content'], good)
 
-        bad = 'a' * 52
-        self.assertGreater(len(b64encode(bad.encode('utf-8'))), max_size)
+        bad = 'a' * 30
+        self.assertGreater(size_in_db(bad), max_size)
         with assertRaisesHTTPError(self, 413):
             cm.save(
                 model={
@@ -234,6 +245,42 @@ class PostgresContentsManagerTestCase(TestContentsManager):
                 },
                 path='bad.txt',
             )
+
+    def test_changing_crypto_disables_ability_to_read(self):
+        cm = self.contents_manager
+
+        _, _, nb_path = self.new_notebook()
+        nb_model = cm.get(nb_path)
+
+        file_path = 'file.txt'
+        cm.save(
+            model={
+                'content': 'not encrypted',
+                'format': 'text',
+                'type': 'file',
+            },
+            path=file_path,
+        )
+        file_model = cm.get(file_path)
+
+        alt_key = b64encode(b'fizzbuzz' * 4)
+        self.set_pgmgr_attribute('crypto', FernetEncryption(Fernet(alt_key)))
+
+        with assertRaisesHTTPError(self, 500):
+            cm.get(nb_path)
+
+        with assertRaisesHTTPError(self, 500):
+            cm.get(file_path)
+
+        # Restore the original crypto instance and verify that we can still
+        # decrypt.
+        self.set_pgmgr_attribute('crypto', self.crypto)
+
+        decrypted_nb_model = cm.get(nb_path)
+        self.assertEqual(nb_model, decrypted_nb_model)
+
+        decrypted_file_model = cm.get(file_path)
+        self.assertEqual(file_model, decrypted_file_model)
 
     def test_relative_paths(self):
         cm = self.contents_manager

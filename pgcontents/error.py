@@ -37,3 +37,7 @@ class FileTooLarge(Exception):
 
 class RenameRoot(Exception):
     pass
+
+
+class CorruptedFile(Exception):
+    pass

@@ -8,15 +8,16 @@ from sqlalchemy import (
 from sqlalchemy.engine.base import Engine
 from tornado.web import HTTPError
 
+from .constants import UNLIMITED
+from .crypto import NoEncryption
 from .query import ensure_db_user
-from .utils.ipycompat import Bool, Instance, HasTraits, Unicode
+from .utils.ipycompat import Any, Bool, Instance, Integer, HasTraits, Unicode
 
 
 class PostgresManagerMixin(HasTraits):
     """
-    Shared  for Postgres-backed ContentsManagers.
+    Shared behavior for Postgres-backed ContentsManagers.
     """
-
     db_url = Unicode(
         default_value="postgresql://{user}@/pgcontents".format(
             user=getuser(),
@@ -36,6 +37,22 @@ class PostgresManagerMixin(HasTraits):
         default_value=True,
         config=True,
         help="Create a user for user_id automatically?",
+    )
+
+    max_file_size_bytes = Integer(
+        default_value=UNLIMITED,
+        config=True,
+        help="Maximum size in bytes of a file that will be saved.",
+    )
+
+    crypto = Any(
+        default_value=NoEncryption(),
+        allow_none=False,
+        config=True,
+        help=(
+            "Object with encrypt() and decrypt() methods to "
+            "call on data entering/exiting the database.",
+        )
     )
 
     engine = Instance(Engine)
