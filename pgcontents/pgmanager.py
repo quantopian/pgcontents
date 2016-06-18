@@ -66,14 +66,14 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     """
     create_directory_on_startup = Bool(
         config=True,
-        help="Create a user for user_id automatically?",
+        help="Create a root directory automatically?",
     )
 
     def _checkpoints_class_default(self):
         return PostgresCheckpoints
 
     def _checkpoints_kwargs_default(self):
-        kw = super(PostgresContentsManager, self)._checkpoint_kwargs_default()
+        kw = super(PostgresContentsManager, self)._checkpoints_kwargs_default()
         kw.update({
             'create_user_on_startup': self.create_user_on_startup,
             'crypto': self.crypto,

@@ -2,56 +2,33 @@
 Tests for synchronization tools.
 """
 from __future__ import unicode_literals
+from base64 import b64encode
+from logging import Logger
 from unittest import TestCase
 
-try:
-    from nbformat.v4 import new_markdown_cell
-    from nbformat.v4.rwbase import strip_transient
-    from notebook.services.contents.filemanager import \
-        FileContentsManager
-except ImportError:
-    from IPython.nbformat.v4 import new_markdown_cell
-    from IPython.nbformat.v4.rwbase import strip_transient
-    from IPython.html.services.contents.filemanager import \
-        FileContentsManager
-from IPython.utils.tempdir import TemporaryDirectory
-from six import iteritems
+from cryptography.fernet import Fernet
+from sqlalchemy import create_engine
 
-from ..checkpoints import PostgresCheckpoints
-from ..crypto import NoEncryption
+from pgcontents import PostgresContentsManager
+from pgcontents.crypto import FernetEncryption, NoEncryption
+from pgcontents.utils.ipycompat import new_markdown_cell
+
 from .utils import (
+    assertRaisesHTTPError,
     clear_test_db,
-    _norm_unicode,
     remigrate_test_schema,
     populate,
     TEST_DB_URL,
 )
-from ..utils.sync import (
-    checkpoint_all,
-    download_checkpoints,
-)
-
-setup_module = remigrate_test_schema
+from ..utils.sync import reencrypt_all_users
 
 
-class TestUploadDownload(TestCase):
+class TestReEncryption(TestCase):
 
     def setUp(self):
-
-        self.td = TemporaryDirectory()
-        self.checkpoints = PostgresCheckpoints(
-            user_id='test',
-            db_url=TEST_DB_URL,
-        )
-        self.contents = FileContentsManager(
-            root_dir=self.td.name,
-            checkpoints=self.checkpoints,
-        )
-
-        self.checkpoints.ensure_user()
+        remigrate_test_schema()
 
     def tearDown(self):
-        self.td.cleanup()
         clear_test_db()
 
     def add_markdown_cell(self, path):
@@ -65,98 +42,108 @@ class TestUploadDownload(TestCase):
         self.contents.save(model, path=path)
         return model
 
-    def test_download_checkpoints(self):
+    def test_reencryption(self):
         """
-        Create two checkpoints for two notebooks, then call
-        download_checkpoints.
-
-        Assert that we get the correct version of both notebooks.
+        Create two unencrypted notebooks and a file, create checkpoints for
+        each, then encrypt and check that content is unchanged, then re-encrypt
+        and check the same.
         """
-        self.contents.new({'type': 'directory'}, 'subdir')
-        paths = ('a.ipynb', 'subdir/a.ipynb')
-        expected_content = {}
-        for path in paths:
-            # Create and checkpoint.
-            self.contents.new(path=path)
+        db_url = TEST_DB_URL
+        user_id = 'test_reencryption'
 
-            self.contents.create_checkpoint(path)
-
-            model = self.add_markdown_cell(path)
-            self.contents.create_checkpoint(path)
-
-            # Assert greater because FileContentsManager creates a checkpoint
-            # on creation, but this isn't part of the spec.
-            self.assertGreater(len(self.contents.list_checkpoints(path)), 2)
-
-            # Store the content to verify correctness after download.
-            expected_content[path] = model['content']
-
-        with TemporaryDirectory() as td:
-            download_checkpoints(
-                self.checkpoints.db_url,
-                td,
-                user='test',
-                crypto=NoEncryption(),
-            )
-
-            fm = FileContentsManager(root_dir=td)
-            root_entries = sorted(m['path'] for m in fm.get('')['content'])
-            self.assertEqual(root_entries, ['a.ipynb', 'subdir'])
-            subdir_entries = sorted(
-                m['path'] for m in fm.get('subdir')['content']
-            )
-            self.assertEqual(subdir_entries, ['subdir/a.ipynb'])
-            for path in paths:
-                content = fm.get(path)['content']
-                self.assertEqual(expected_content[path], content)
-
-    def test_checkpoint_all(self):
-        """
-        Test that checkpoint_all correctly makes a checkpoint for all files.
-        """
-        paths = populate(self.contents)
-        original_content_minus_trust = {
-            # Remove metadata that we expect to have dropped
-            path: strip_transient(self.contents.get(path)['content'])
-            for path in paths
-        }
-
-        original_cps = {}
-        for path in paths:
-            # Create a checkpoint, then update the file.
-            original_cps[path] = self.contents.create_checkpoint(path)
-            self.add_markdown_cell(path)
-
-        # Verify that we still have the old version checkpointed.
-        cp_content = {
-            path: self.checkpoints.get_notebook_checkpoint(
-                cp['id'],
-                path,
-            )['content']
-            for path, cp in iteritems(original_cps)
-        }
-        self.assertEqual(original_content_minus_trust, cp_content)
-
-        new_cps = checkpoint_all(
-            self.checkpoints.db_url,
-            self.td.name,
-            self.checkpoints.user_id,
+        no_crypto = NoEncryption()
+        no_crypto_manager = PostgresContentsManager(
+            user_id=user_id,
+            db_url=db_url,
+            crypto=no_crypto,
+            create_user_on_startup=True,
         )
 
-        new_cp_content = {
-            path: self.checkpoints.get_notebook_checkpoint(
-                cp['id'],
-                path,
-            )['content']
-            for path, cp in iteritems(new_cps)
-        }
-        for path, new_content in iteritems(new_cp_content):
-            old_content = original_content_minus_trust[_norm_unicode(path)]
-            self.assertEqual(
-                new_content['cells'][:-1],
-                old_content['cells'],
+        key1 = b'fizzbuzz' * 4
+        crypto1 = FernetEncryption(Fernet(b64encode(key1)))
+        manager1 = PostgresContentsManager(
+            user_id=user_id,
+            db_url=db_url,
+            crypto=crypto1,
+        )
+
+        key2 = key1[::-1]
+        crypto2 = FernetEncryption(Fernet(b64encode(key2)))
+        manager2 = PostgresContentsManager(
+            user_id=user_id,
+            db_url=db_url,
+            crypto=crypto2,
+        )
+
+        # Populate an unencrypted user.
+        paths = populate(no_crypto_manager)
+
+        original_content = {}
+        for path in paths:
+            # Create a checkpoint of the original content and store what we
+            # expect it to look like.
+            no_crypto_manager.create_checkpoint(path)
+            original_content[path] = no_crypto_manager.get(path)['content']
+
+        updated_content = {}
+        for path in paths:
+            # Create a new version of each notebook with a cell appended.
+            model = no_crypto_manager.get(path=path)
+            model['content'].cells.append(
+                new_markdown_cell('Created by test: ' + path)
             )
-            self.assertEqual(
-                new_content['cells'][-1],
-                new_markdown_cell('Created by test: ' + _norm_unicode(path)),
-            )
+            no_crypto_manager.save(model, path=path)
+
+            # Store the updated content.
+            updated_content[path] = no_crypto_manager.get(path)['content']
+
+            # Create a checkpoint of the new content.
+            no_crypto_manager.create_checkpoint(path)
+
+        def check_path_content(path, mgr, expected):
+            retrieved = mgr.get(path)['content']
+            self.assertEqual(retrieved, expected[path])
+
+        def check_reencryption(old, new):
+            for path in paths:
+                # We should no longer be able to retrieve notebooks from the
+                # no-crypto manager.
+                with assertRaisesHTTPError(self, 500):
+                    old.get(path)
+
+                # The new manager should read the latest version of each file.
+                check_path_content(path, new, updated_content)
+
+                # We should have two checkpoints available, one from the
+                # original version of the file, and one for the updated
+                # version.
+                (new_cp, old_cp) = new.list_checkpoints(path)
+                self.assertGreater(
+                    new_cp['last_modified'],
+                    old_cp['last_modified'],
+                )
+
+                # The old checkpoint should restore us to the original state.
+                new.restore_checkpoint(old_cp['id'], path)
+                check_path_content(path, new, original_content)
+
+                # The new checkpoint should put us back into our updated state.
+                # state.
+                new.restore_checkpoint(new_cp['id'], path)
+                check_path_content(path, new, updated_content)
+
+        engine = create_engine(db_url)
+        logger = Logger('Reencryption Testing')
+
+        no_crypto_factory = {user_id: no_crypto}.__getitem__
+        crypto1_factory = {user_id: crypto1}.__getitem__
+        crypto2_factory = {user_id: crypto2}.__getitem__
+
+        reencrypt_all_users(engine, no_crypto_factory, crypto1_factory, logger)
+        check_reencryption(no_crypto_manager, manager1)
+
+        reencrypt_all_users(engine, crypto1_factory, crypto2_factory, logger)
+        check_reencryption(manager1, manager2)
+
+        reencrypt_all_users(engine, crypto2_factory, no_crypto_factory, logger)
+        check_reencryption(manager2, no_crypto_manager)

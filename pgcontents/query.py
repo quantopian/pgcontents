@@ -76,6 +76,9 @@ def unused_decrypt_func(s):
 # Users
 # =====
 
+def list_users(db):
+    return db.execute(select([users.c.id]))
+
 
 def ensure_db_user(db, user_id):
     """
@@ -664,6 +667,9 @@ def save_remote_checkpoint(db,
                            content,
                            encrypt_func,
                            max_size_bytes):
+    # IMPORTANT NOTE: Read the long comment at the top of
+    # ``reencrypt_user_content`` before you change this function.
+
     content = preprocess_incoming_content(
         content,
         encrypt_func,
@@ -694,25 +700,99 @@ def purge_remote_checkpoints(db, user_id):
     )
 
 
-def latest_remote_checkpoints(db, user_id):
+##########################
+# Reencryption Utilities #
+##########################
+def reencrypt_row_content(db,
+                          table,
+                          row_id,
+                          decrypt_func,
+                          encrypt_func,
+                          logger):
     """
-    Get the latest version of each file for the user.
+    Re-encrypt a row from ``table`` with ``id`` of ``row_id``.
     """
-    query_fields = [
-        remote_checkpoints.c.id,
-        remote_checkpoints.c.path,
-    ]
+    q = select([table.c.content]).where(table.c.id == row_id)
+    [(content,)] = db.execute(q)
 
-    query = select(query_fields).where(
-        remote_checkpoints.c.user_id == user_id,
-    ).order_by(
-        remote_checkpoints.c.path,
-        desc(remote_checkpoints.c.last_modified),
-    ).distinct(
-        remote_checkpoints.c.path,
+    logger.info("Begin encrypting %s row %s.", table.name, row_id)
+    db.execute(
+        table
+        .update()
+        .where(table.c.id == row_id)
+        .values(content=encrypt_func(decrypt_func(content)))
     )
-    results = db.execute(query)
-    return (
-        to_dict_no_content(query_fields, row)
-        for row in results
+    logger.info("Done encrypting %s row %s.", table.name, row_id)
+
+
+def select_file_ids(db, user_id):
+    """
+    Get all file ids for a user.
+    """
+    return list(
+        db.execute(
+            select([files.c.id])
+            .where(files.c.user_id == user_id)
+        )
     )
+
+
+def select_remote_checkpoint_ids(db, user_id):
+    """
+    Get all file ids for a user.
+    """
+    return list(
+        db.execute(
+            select([remote_checkpoints.c.id])
+            .where(remote_checkpoints.c.user_id == user_id)
+        )
+    )
+
+
+def reencrypt_user_content(engine,
+                           user_id,
+                           old_decrypt_func,
+                           new_encrypt_func,
+                           logger):
+    """
+    Re-encrypt all of the files and checkpoints for a single user.
+    """
+    logger.info("Begin re-encryption for user %s", user_id)
+    with engine.begin() as db:
+        # NOTE: Doing both of these operations in one transaction depends for
+        # correctness on the fact that the creation of new checkpoints always
+        # involves writing new data into the database from Python, rather than
+        # simply copying data inside the DB.
+
+        # If we change checkpoint creation so that it does an in-database copy,
+        # then we need to split this transaction to ensure that
+        # file-reencryption is complete before checkpoint-reencryption starts.
+
+        # If that doesn't happen, it will be possible for a user to create a
+        # new checkpoint in a transaction that hasn't seen the completed
+        # file-reencryption process, but we might not see that checkpoint here,
+        # which means that we would never update the content of that checkpoint
+        # to the new encryption key.
+
+        logger.info("Re-encrypting files for %s", user_id)
+        for (file_id,) in select_file_ids(db, user_id):
+            reencrypt_row_content(
+                db,
+                files,
+                file_id,
+                old_decrypt_func,
+                new_encrypt_func,
+                logger,
+            )
+
+        logger.info("Re-encrypting checkpoints for %s", user_id)
+        for (cp_id,) in select_remote_checkpoint_ids(db, user_id):
+            reencrypt_row_content(
+                db,
+                remote_checkpoints,
+                cp_id,
+                old_decrypt_func,
+                new_encrypt_func,
+                logger,
+            )
+    logger.info("Finished re-encryption for user %s", user_id)
