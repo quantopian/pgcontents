@@ -32,6 +32,7 @@ from .error import (
     FileExists,
     DirectoryExists,
     FileTooLarge,
+    InvalidName,
     NoSuchCheckpoint,
     NoSuchDirectory,
     NoSuchFile,
@@ -410,6 +411,9 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
 
     if old_db_path == '/':
         raise RenameRoot('Renaming the root directory is not permitted.')
+
+    if '/' in new_db_path:
+        raise InvalidName("Directory names cannot contain '/'.")
 
     # Overwriting existing directories is disallowed.
     if _dir_exists(db, user_id, new_db_path):

@@ -36,6 +36,7 @@ from .error import (
     DirectoryNotEmpty,
     FileExists,
     FileTooLarge,
+    InvalidName,
     NoSuchDirectory,
     NoSuchFile,
     PathOutsideRoot,
@@ -370,6 +371,8 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             except (FileExists, DirectoryExists):
                 self.already_exists(path)
             except RenameRoot as e:
+                self.do_409(str(e))
+            except InvalidName as e:
                 self.do_409(str(e))
 
     def _delete_non_directory(self, path):

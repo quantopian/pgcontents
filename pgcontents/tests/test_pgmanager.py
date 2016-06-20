@@ -181,6 +181,10 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         with assertRaisesHTTPError(self, 409):
             cm.rename('', 'baz')
 
+        # Directory names cannot contain slashes
+        with assertRaisesHTTPError(self, 409):
+            cm.rename('foo', 'f/oo')
+
         # Verify that we can't create a new notebook in the (nonexistent)
         # target directory
         with assertRaisesHTTPError(self, 404):
