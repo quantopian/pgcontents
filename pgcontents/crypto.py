@@ -39,6 +39,15 @@ class FernetEncryption(object):
     -------
     encrypt : callable[bytes -> bytes]
     decrypt : callable[bytes -> bytes]
+
+    Notes
+    -----
+    ``cryptography.fernet.MultiFernet`` can be used instead of a vanilla
+    ``Fernet`` to allow zero-downtime key rotation.
+
+    See Also
+    --------
+    :func:`pgcontents.utils.sync.reencrypt_user`
     """
     __slots__ = ('_fernet',)
 
