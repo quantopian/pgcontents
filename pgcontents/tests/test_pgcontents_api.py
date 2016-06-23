@@ -293,7 +293,6 @@ class PostgresContentsAPITest(_APITestBase):
 
 class EncryptedPostgresContentsAPITest(PostgresContentsAPITest):
     config = postgres_contents_config()
-    # The key for this needs to be a b64-encoded 32-byte string.
     config.PostgresContentsManager.crypto = make_fernet()
 
     def test_crypto_types(self):
