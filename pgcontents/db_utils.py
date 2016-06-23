@@ -17,7 +17,7 @@ Utilities for working with databases.
 """
 
 from contextlib import contextmanager
-from six.moves import zip
+from six.moves import map, zip
 
 from psycopg2.errorcodes import (
     FOREIGN_KEY_VIOLATION,
@@ -65,14 +65,37 @@ def _get_name(column_like):
         return column_like.clause.name
 
 
-def to_dict(fields, row):
+def to_dict_no_content(fields, row):
     """
-    Convert a SQLAlchemy row to a dict.
+    Convert a SQLAlchemy row that does not contain a 'content' field to a dict.
 
     If row is None, return None.
+
+    Raises AssertionError if there is a field named 'content' in ``fields``.
     """
     assert(len(fields) == len(row))
-    return {
-        _get_name(field): value
-        for field, value in zip(fields, row)
-    }
+
+    field_names = list(map(_get_name, fields))
+    assert 'content' not in field_names, "Unexpected content field."
+
+    return dict(zip(field_names, row))
+
+
+def to_dict_with_content(fields, row, decrypt_func):
+    """
+    Convert a SQLAlchemy row that contains a 'content' field to a dict.
+
+    ``decrypt_func`` will be applied to the ``content`` field of the row.
+
+    If row is None, return None.
+
+    Raises AssertionError if there is no field named 'content' in ``fields``.
+    """
+    assert(len(fields) == len(row))
+
+    field_names = list(map(_get_name, fields))
+    assert 'content' in field_names, "Missing content field."
+
+    result = dict(zip(field_names, row))
+    result['content'] = decrypt_func(result['content'])
+    return result

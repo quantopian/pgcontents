@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-PostgreSQL implementation of IPython ContentsManager API.
+PostgreSQL implementation of IPython/Jupyter ContentsManager API.
 """
 from __future__ import unicode_literals
 from itertools import chain
@@ -30,8 +30,8 @@ from .api_utils import (
     writes_base64,
 )
 from .checkpoints import PostgresCheckpoints
-from .constants import UNLIMITED
 from .error import (
+    CorruptedFile,
     DirectoryExists,
     DirectoryNotEmpty,
     FileExists,
@@ -56,7 +56,7 @@ from .query import (
     rename_file,
     save_file,
 )
-from .utils.ipycompat import Bool, ContentsManager, Integer, from_dict
+from .utils.ipycompat import Bool, ContentsManager, from_dict
 
 
 class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
@@ -64,15 +64,9 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     ContentsManager that persists to a postgres database rather than to the
     local filesystem.
     """
-    max_file_size_bytes = Integer(
-        default_value=UNLIMITED,
-        config=True,
-        help="Maximum size in bytes of a file that will be saved.",
-    )
-
     create_directory_on_startup = Bool(
         config=True,
-        help="Create a user for user_id automatically?",
+        help="Create a root directory automatically?",
     )
 
     def _checkpoints_class_default(self):
@@ -80,13 +74,13 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
 
     def _checkpoints_kwargs_default(self):
         kw = super(PostgresContentsManager, self)._checkpoints_kwargs_default()
-        kw.update(
-            {
-                'db_url': self.db_url,
-                'user_id': self.user_id,
-                'create_user_on_startup': self.create_user_on_startup,
-            }
-        )
+        kw.update({
+            'create_user_on_startup': self.create_user_on_startup,
+            'crypto': self.crypto,
+            'db_url': self.db_url,
+            'max_file_size_bytes': self.max_file_size_bytes,
+            'user_id': self.user_id,
+        })
         return kw
 
     def _create_directory_on_startup_default(self):
@@ -149,7 +143,15 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             }[type]
         except KeyError:
             raise ValueError("Unknown type passed: '{}'".format(type))
-        return fn(path=path, content=content, format=format)
+
+        try:
+            return fn(path=path, content=content, format=format)
+        except CorruptedFile as e:
+            self.log.error(
+                u'Corrupted file encountered at path %r. %s',
+                path, e, exc_info=True,
+            )
+            self.do_500("Unable to read stored content at path %r." % path)
 
     @outside_root_to_404
     def get_file_id(self, path):
@@ -171,7 +173,13 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         """
         with self.engine.begin() as db:
             try:
-                record = get_file(db, self.user_id, path, content)
+                record = get_file(
+                    db,
+                    self.user_id,
+                    path,
+                    content,
+                    self.crypto.decrypt,
+                )
             except NoSuchFile:
                 self.no_such_entity(path)
 
@@ -265,7 +273,13 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     def _get_file(self, path, content, format):
         with self.engine.begin() as db:
             try:
-                record = get_file(db, self.user_id, path, content)
+                record = get_file(
+                    db,
+                    self.user_id,
+                    path,
+                    content,
+                    self.crypto.decrypt,
+                )
             except NoSuchFile:
                 if self.dir_exists(path):
                     # TODO: It's awkward/expensive to have to check this to
@@ -288,6 +302,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             self.user_id,
             path,
             writes_base64(nb_contents),
+            self.crypto.encrypt,
             self.max_file_size_bytes,
         )
         # It's awkward that this writes to the model instead of returning.
@@ -303,6 +318,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             self.user_id,
             path,
             to_b64(model['content'], model.get('format', None)),
+            self.crypto.encrypt,
             self.max_file_size_bytes,
         )
         return None

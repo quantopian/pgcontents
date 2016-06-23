@@ -25,7 +25,8 @@ from .db_utils import (
     ignore_unique_violation,
     is_unique_violation,
     is_foreign_key_violation,
-    to_dict,
+    to_dict_no_content,
+    to_dict_with_content,
 )
 from .error import (
     DirectoryNotEmpty,
@@ -37,16 +38,46 @@ from .error import (
     NoSuchFile,
     RenameRoot,
 )
-from .schema import(
+from .schema import (
     directories,
     files,
     remote_checkpoints,
     users,
 )
 
+# ===============================
+# Encryption/Decryption Utilities
+# ===============================
+
+
+def preprocess_incoming_content(content, encrypt_func, max_size_bytes):
+    """
+    Apply preprocessing steps to file/notebook content that we're going to
+    write to the database.
+
+    Applies ``encrypt_func`` to ``content`` and checks that the result is
+    smaller than ``max_size_bytes``.
+    """
+    encrypted = encrypt_func(content)
+    if max_size_bytes != UNLIMITED and len(encrypted) > max_size_bytes:
+        raise FileTooLarge()
+    return encrypted
+
+
+def unused_decrypt_func(s):
+    """
+    Used by invocations of ``get_file`` that don't expect decrypt_func to be
+    called.
+    """
+    raise AssertionError("Unexpected decrypt call.")
+
+
 # =====
 # Users
 # =====
+
+def list_users(db):
+    return db.execute(select([users.c.id]))
 
 
 def ensure_db_user(db, user_id):
@@ -201,7 +232,7 @@ def files_in_directory(db, user_id, db_dirname):
             files.c.user_id, files.c.parent_name, files.c.name,
         )
     )
-    return [to_dict(fields, row) for row in rows]
+    return [to_dict_no_content(fields, row) for row in rows]
 
 
 def directories_in_directory(db, user_id, db_dirname):
@@ -216,7 +247,7 @@ def directories_in_directory(db, user_id, db_dirname):
             _is_in_directory(directories, user_id, db_dirname),
         )
     )
-    return [to_dict(fields, row) for row in rows]
+    return [to_dict_no_content(fields, row) for row in rows]
 
 
 def get_directory(db, user_id, api_dirname, content):
@@ -300,7 +331,7 @@ def _file_default_fields():
     ]
 
 
-def _get_file(db, user_id, api_path, query_fields):
+def _get_file(db, user_id, api_path, query_fields, decrypt_func):
     """
     Get file data for the given user_id, path, and query_fields.  The
     query_fields parameter specifies which database fields should be
@@ -312,10 +343,14 @@ def _get_file(db, user_id, api_path, query_fields):
 
     if result is None:
         raise NoSuchFile(api_path)
-    return to_dict(query_fields, result)
+
+    if files.c.content in query_fields:
+        return to_dict_with_content(query_fields, result, decrypt_func)
+    else:
+        return to_dict_no_content(query_fields, result)
 
 
-def get_file(db, user_id, api_path, include_content):
+def get_file(db, user_id, api_path, include_content, decrypt_func):
     """
     Get file data for the given user_id and path.
 
@@ -325,7 +360,7 @@ def get_file(db, user_id, api_path, include_content):
     if include_content:
         query_fields.append(files.c.content)
 
-    return _get_file(db, user_id, api_path, query_fields)
+    return _get_file(db, user_id, api_path, query_fields, decrypt_func)
 
 
 def get_file_id(db, user_id, api_path):
@@ -333,7 +368,13 @@ def get_file_id(db, user_id, api_path):
     Get the value in the 'id' column for the file with the given
     user_id and path.
     """
-    return _get_file(db, user_id, api_path, [files.c.id])['id']
+    return _get_file(
+        db,
+        user_id,
+        api_path,
+        [files.c.id],
+        unused_decrypt_func,
+    )['id']
 
 
 def delete_file(db, user_id, api_path):
@@ -360,7 +401,13 @@ def file_exists(db, user_id, path):
     Check if a file exists.
     """
     try:
-        get_file(db, user_id, path, include_content=False)
+        get_file(
+            db,
+            user_id,
+            path,
+            include_content=False,
+            decrypt_func=unused_decrypt_func,
+        )
         return True
     except NoSuchFile:
         return False
@@ -458,21 +505,17 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
     )
 
 
-def check_content(content, max_size_bytes):
-    """
-    Check that the content to be saved isn't too large to store.
-    """
-    if max_size_bytes != UNLIMITED and len(content) > max_size_bytes:
-        raise FileTooLarge()
-
-
-def save_file(db, user_id, path, content, max_size_bytes):
+def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
     """
     Save a file.
 
     TODO: Update-then-insert is probably cheaper than insert-then-update.
     """
-    check_content(content, max_size_bytes)
+    content = preprocess_incoming_content(
+        content,
+        encrypt_func,
+        max_size_bytes,
+    )
     directory, name = split_api_filepath(path)
     with db.begin_nested() as savepoint:
         try:
@@ -556,7 +599,7 @@ def list_remote_checkpoints(db, user_id, api_path):
         ),
     )
 
-    return [to_dict(fields, row) for row in results]
+    return [to_dict_no_content(fields, row) for row in results]
 
 
 def move_single_remote_checkpoint(db,
@@ -597,7 +640,7 @@ def move_remote_checkpoints(db, user_id, src_api_path, dest_api_path):
     )
 
 
-def get_remote_checkpoint(db, user_id, api_path, checkpoint_id):
+def get_remote_checkpoint(db, user_id, api_path, checkpoint_id, decrypt_func):
     db_path = from_api_filename(api_path)
     fields = [remote_checkpoints.c.content]
     result = db.execute(
@@ -610,15 +653,28 @@ def get_remote_checkpoint(db, user_id, api_path, checkpoint_id):
                 remote_checkpoints.c.id == int(checkpoint_id),
             ),
         )
-    ).first()
+    ).first()  # NOTE: This applies a LIMIT 1 to the query.
 
     if result is None:
         raise NoSuchCheckpoint(api_path, checkpoint_id)
 
-    return to_dict(fields, result)
+    return to_dict_with_content(fields, result, decrypt_func)
 
 
-def save_remote_checkpoint(db, user_id, api_path, content):
+def save_remote_checkpoint(db,
+                           user_id,
+                           api_path,
+                           content,
+                           encrypt_func,
+                           max_size_bytes):
+    # IMPORTANT NOTE: Read the long comment at the top of
+    # ``reencrypt_user_content`` before you change this function.
+
+    content = preprocess_incoming_content(
+        content,
+        encrypt_func,
+        max_size_bytes,
+    )
     return_fields = _remote_checkpoint_default_fields()
     result = db.execute(
         remote_checkpoints.insert().values(
@@ -630,7 +686,7 @@ def save_remote_checkpoint(db, user_id, api_path, content):
         ),
     ).first()
 
-    return to_dict(return_fields, result)
+    return to_dict_no_content(return_fields, result)
 
 
 def purge_remote_checkpoints(db, user_id):
@@ -644,22 +700,99 @@ def purge_remote_checkpoints(db, user_id):
     )
 
 
-def latest_remote_checkpoints(db, user_id):
+##########################
+# Reencryption Utilities #
+##########################
+def reencrypt_row_content(db,
+                          table,
+                          row_id,
+                          decrypt_func,
+                          encrypt_func,
+                          logger):
     """
-    Get the latest version of each file for the user.
+    Re-encrypt a row from ``table`` with ``id`` of ``row_id``.
     """
-    query_fields = [
-        remote_checkpoints.c.id,
-        remote_checkpoints.c.path,
-    ]
+    q = select([table.c.content]).where(table.c.id == row_id)
+    [(content,)] = db.execute(q)
 
-    query = select(query_fields).where(
-        remote_checkpoints.c.user_id == user_id,
-    ).order_by(
-        remote_checkpoints.c.path,
-        desc(remote_checkpoints.c.last_modified),
-    ).distinct(
-        remote_checkpoints.c.path,
+    logger.info("Begin encrypting %s row %s.", table.name, row_id)
+    db.execute(
+        table
+        .update()
+        .where(table.c.id == row_id)
+        .values(content=encrypt_func(decrypt_func(content)))
     )
-    results = db.execute(query)
-    return (to_dict(query_fields, row) for row in results)
+    logger.info("Done encrypting %s row %s.", table.name, row_id)
+
+
+def select_file_ids(db, user_id):
+    """
+    Get all file ids for a user.
+    """
+    return list(
+        db.execute(
+            select([files.c.id])
+            .where(files.c.user_id == user_id)
+        )
+    )
+
+
+def select_remote_checkpoint_ids(db, user_id):
+    """
+    Get all file ids for a user.
+    """
+    return list(
+        db.execute(
+            select([remote_checkpoints.c.id])
+            .where(remote_checkpoints.c.user_id == user_id)
+        )
+    )
+
+
+def reencrypt_user_content(engine,
+                           user_id,
+                           old_decrypt_func,
+                           new_encrypt_func,
+                           logger):
+    """
+    Re-encrypt all of the files and checkpoints for a single user.
+    """
+    logger.info("Begin re-encryption for user %s", user_id)
+    with engine.begin() as db:
+        # NOTE: Doing both of these operations in one transaction depends for
+        # correctness on the fact that the creation of new checkpoints always
+        # involves writing new data into the database from Python, rather than
+        # simply copying data inside the DB.
+
+        # If we change checkpoint creation so that it does an in-database copy,
+        # then we need to split this transaction to ensure that
+        # file-reencryption is complete before checkpoint-reencryption starts.
+
+        # If that doesn't happen, it will be possible for a user to create a
+        # new checkpoint in a transaction that hasn't seen the completed
+        # file-reencryption process, but we might not see that checkpoint here,
+        # which means that we would never update the content of that checkpoint
+        # to the new encryption key.
+
+        logger.info("Re-encrypting files for %s", user_id)
+        for (file_id,) in select_file_ids(db, user_id):
+            reencrypt_row_content(
+                db,
+                files,
+                file_id,
+                old_decrypt_func,
+                new_encrypt_func,
+                logger,
+            )
+
+        logger.info("Re-encrypting checkpoints for %s", user_id)
+        for (cp_id,) in select_remote_checkpoint_ids(db, user_id):
+            reencrypt_row_content(
+                db,
+                remote_checkpoints,
+                cp_id,
+                old_decrypt_func,
+                new_encrypt_func,
+                logger,
+            )
+    logger.info("Finished re-encryption for user %s", user_id)

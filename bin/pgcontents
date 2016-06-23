@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from getpass import getuser
 from os import getcwd
-from os.path import join
 import subprocess
 from textwrap import dedent
 
@@ -15,10 +14,6 @@ from pgcontents.constants import (
 from pgcontents.utils.migrate import (
     temp_alembic_ini,
     upgrade,
-)
-from pgcontents.utils.sync import (
-    checkpoint_all,
-    download_checkpoints,
 )
 
 
@@ -113,37 +108,6 @@ def gen_migration(db_url):
             ['alembic', '-c', alembic_ini, 'revision', '--autogenerate']
         )
 
-
-@main.command('download_checkpoints')
-@_db_url
-@_directory
-@_users
-def _download_checkpoints(db_url, directory, users):
-    """
-    Download checkpoints to a directory.
-    """
-    users = users.split(',')
-    if len(users) == 1:
-        download_checkpoints(db_url, directory, users[0])
-    else:
-        for user in users:
-            download_checkpoints(db_url, join(directory, user), user)
-
-
-@main.command('checkpoint_all')
-@_db_url
-@_directory
-@_users
-def _checkpoint_all(db_url, directory, users):
-    """
-    Upload a checkpoint for every file in a directory.
-    """
-    users = users.split(',')
-    if len(users) == 1:
-        checkpoint_all(db_url, directory, users[0])
-    else:
-        for user in users:
-            checkpoint_all(db_url, join(directory, user), user)
 
 if __name__ == "__main__":
     main()
