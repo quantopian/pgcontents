@@ -142,11 +142,24 @@ class TestReEncryption(TestCase):
         crypto1_factory = {user_id: crypto1}.__getitem__
         crypto2_factory = {user_id: crypto2}.__getitem__
 
-        reencrypt_all_users(engine, no_crypto_factory, crypto1_factory, logger)
-        check_reencryption(no_crypto_manager, manager1)
+        # Verify that reencryption is idempotent:
+        for _ in range(2):
+            reencrypt_all_users(
+                engine,
+                no_crypto_factory,
+                crypto1_factory,
+                logger,
+            )
+            check_reencryption(no_crypto_manager, manager1)
 
-        reencrypt_all_users(engine, crypto1_factory, crypto2_factory, logger)
-        check_reencryption(manager1, manager2)
+        for _ in range(2):
+            reencrypt_all_users(
+                engine,
+                crypto1_factory,
+                crypto2_factory,
+                logger,
+            )
+            check_reencryption(manager1, manager2)
 
         with self.assertRaises(ValueError):
             # Using reencrypt_all_users with a no-encryption target isn't
