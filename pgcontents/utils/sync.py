@@ -7,6 +7,7 @@ from __future__ import (
 )
 
 from ..checkpoints import PostgresCheckpoints
+from ..crypto import FallbackCrypto
 from ..query import (
     list_users,
     reencrypt_user_content,
@@ -90,6 +91,19 @@ def reencrypt_all_users(engine,
     """
     Re-encrypt data for all users.
 
+    This function is idempotent, meaning that it should be possible to apply
+    the same re-encryption process multiple times without having any effect on
+    the database.  Idempotency is achieved by first attempting to decrypt with
+    the old crypto and falling back to the new crypto on failure.
+
+    An important consequence of this strategy is that **decrypting** a database
+    is not supported with this function, because ``NoEncryption.decrypt``
+    always succeeds.  To decrypt an already-encrypted database, use
+    ``unencrypt_all_users`` instead.
+
+    It is, however, possible to perform an initial encryption of a database by
+    passing a function returning a ``NoEncryption`` as ``old_crypto_factory``.
+
     Parameters
     ----------
     engine : SQLAlchemy.engine
@@ -102,12 +116,20 @@ def reencrypt_all_users(engine,
         A function from user_id to an object providing the interface required
         by PostgresContentsManager.crypto.  Results of this will be used for
         re-encryption of database content.
+
+        This **must not** return instances of ``NoEncryption``. Use
+        ``unencrypt_all_users`` if you want to unencrypt a database.
     logger : logging.Logger, optional
         A logger to user during re-encryption.
+
+    See Also
+    --------
+    reencrypt_user
+    unencrypt_all_users
     """
     logger.info("Beginning re-encryption for all users.")
     for user_id in all_user_ids(engine):
-        reencrypt_user(
+        reencrypt_single_user(
             engine,
             user_id,
             old_crypto=old_crypto_factory(user_id),
@@ -117,14 +139,56 @@ def reencrypt_all_users(engine,
     logger.info("Finished re-encryption for all users.")
 
 
-def reencrypt_user(engine, user_id, old_crypto, new_crypto, logger):
+def reencrypt_single_user(engine, user_id, old_crypto, new_crypto, logger):
     """
     Re-encrypt all files and checkpoints for a single user.
     """
+    # Use FallbackCrypto so that we're re-entrant if we halt partway through.
+    crypto = FallbackCrypto([new_crypto, old_crypto])
+
     reencrypt_user_content(
-        engine,
-        user_id,
-        old_crypto.decrypt,
-        new_crypto.encrypt,
+        engine=engine,
+        user_id=user_id,
+        old_decrypt_func=crypto.decrypt,
+        new_encrypt_func=crypto.encrypt,
+        logger=logger,
+    )
+
+
+def unencrypt_all_users(engine, old_crypto_factory, logger):
+    """
+    Unencrypt data for all users.
+
+    Parameters
+    ----------
+    engine : SQLAlchemy.engine
+        Engine encapsulating database connections.
+    old_crypto_factory : function[str -> Any]
+        A function from user_id to an object providing the interface required
+        by PostgresContentsManager.crypto.  Results of this will be used for
+        decryption of existing database content.
+    logger : logging.Logger, optional
+        A logger to user during re-encryption.
+    """
+    logger.info("Beginning re-encryption for all users.")
+    for user_id in all_user_ids(engine):
+        unencrypt_single_user(
+            engine=engine,
+            user_id=user_id,
+            old_crypto=old_crypto_factory(user_id),
+            logger=logger,
+        )
+    logger.info("Finished re-encryption for all users.")
+
+
+def unencrypt_single_user(engine, user_id, old_crypto, logger):
+    """
+    Unencrypt all files and checkpoints for a single user.
+    """
+    reencrypt_user_content(
+        engine=engine,
+        user_id=user_id,
+        old_decrypt_func=old_crypto.decrypt,
+        new_encrypt_func=lambda s: s,
         logger=logger,
     )

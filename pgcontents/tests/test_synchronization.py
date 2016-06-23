@@ -20,7 +20,10 @@ from .utils import (
     populate,
     TEST_DB_URL,
 )
-from ..utils.sync import reencrypt_all_users
+from ..utils.sync import (
+    reencrypt_all_users,
+    unencrypt_all_users,
+)
 
 
 class TestReEncryption(TestCase):
@@ -145,5 +148,19 @@ class TestReEncryption(TestCase):
         reencrypt_all_users(engine, crypto1_factory, crypto2_factory, logger)
         check_reencryption(manager1, manager2)
 
-        reencrypt_all_users(engine, crypto2_factory, no_crypto_factory, logger)
+        with self.assertRaises(ValueError):
+            # Using reencrypt_all_users with a no-encryption target isn't
+            # supported.
+            reencrypt_all_users(
+                engine,
+                crypto2_factory,
+                no_crypto_factory,
+                logger,
+            )
+        # There should have been no changes from the failed attempt.
+        check_reencryption(manager1, manager2)
+
+        # Unencrypt and verify that we can now read everything with the no
+        # crypto manager.
+        unencrypt_all_users(engine, crypto2_factory, logger)
         check_reencryption(manager2, no_crypto_manager)

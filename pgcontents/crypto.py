@@ -74,3 +74,56 @@ class FernetEncryption(object):
         # be deepcopy-able. Cryptography's Fernet objects aren't deepcopy-able,
         # so we copy our underlying state to a new FernetEncryption object.
         return FernetEncryption(self._fernet)
+
+
+class FallbackCrypto(object):
+    """
+    Notebook encryption that accepts a list of crypto instances and decrypts by
+    trying them in order.
+
+    Sub-cryptos should raise ``CorruptedFile`` if they're unable to decrypt an
+    input.
+
+    This is conceptually similar to the technique used by
+    ``cryptography.fernet.MultiFernet`` for implementing key rotation.
+
+    Parameters
+    ----------
+    cryptos : list[object]
+       A sequence of cryptos to use for decryption. cryptos[0] will always be
+       used for encryption.
+
+    Methods
+    -------
+    encrypt : callable[bytes -> bytes]
+    decrypt : callable[bytes -> bytes]
+
+    Notes
+    -----
+    Since NoEncryption will always succeed, it is only supported as the last
+    entry in ``cryptos``.  Passing a list with a NoEncryption not in the last
+    location will raise a ValueError.
+    """
+    __slots__ = ('_cryptos',)
+
+    def __init__(self, cryptos):
+        # Only the last crypto can be a ``NoEncryption``.
+        for c in cryptos[:-1]:
+            if isinstance(c, NoEncryption):
+                raise ValueError(
+                    "NoEncryption is only supported as the last fallback."
+                )
+
+        self._cryptos = cryptos
+
+    def encrypt(self, s):
+        return self._cryptos[0].encrypt(s)
+
+    def decrypt(self, s):
+        errors = []
+        for c in self._cryptos:
+            try:
+                return c.decrypt(s)
+            except CorruptedFile as e:
+                errors.append(e)
+        raise CorruptedFile(errors)
