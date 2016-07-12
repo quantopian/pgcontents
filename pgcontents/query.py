@@ -712,7 +712,10 @@ def reencrypt_row_content(db,
     """
     Re-encrypt a row from ``table`` with ``id`` of ``row_id``.
     """
-    q = select([table.c.content]).where(table.c.id == row_id)
+    q = (select([table.c.content])
+         .with_for_update()
+         .where(table.c.id == row_id))
+
     [(content,)] = db.execute(q)
 
     logger.info("Begin encrypting %s row %s.", table.name, row_id)
