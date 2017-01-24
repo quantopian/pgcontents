@@ -485,5 +485,6 @@ class EncryptedHybridContentsAPITest(HybridContentsPGRootAPITest):
             FernetEncryption,
         )
 
+
 # This needs to be removed or else we'll run the main IPython tests as well.
 del APITest
