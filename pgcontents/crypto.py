@@ -1,11 +1,22 @@
 """
 Interface definition for encryption/decryption plugins for
-PostgresContentsManager.
+PostgresContentsManager, and implementations of the interface.
 
 Encryption backends should raise pgcontents.error.CorruptedFile if they
 encounter an input that they cannot decrypt.
 """
+import sys
+import base64
+
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 from .error import CorruptedFile
+
+if sys.version_info.major == 3:
+    unicode = str
 
 
 class NoEncryption(object):
@@ -127,3 +138,91 @@ class FallbackCrypto(object):
             except CorruptedFile as e:
                 errors.append(e)
         raise CorruptedFile(errors)
+
+
+def ascii_unicode_to_bytes(v):
+    assert isinstance(v, unicode), "Expected unicode, got %s" % type(v)
+    return v.encode('ascii')
+
+
+def derive_single_fernet_key(password, user_id):
+    """
+    Convert a secret key and a user ID into an encryption key to use with a
+    ``cryptography.fernet.Fernet``.
+
+    Taken from
+    https://cryptography.io/en/latest/fernet/#using-passwords-with-fernet
+
+    Parameters
+    ----------
+    password : unicode
+        List of ascii-encodable keys to derive.
+    user_id : unicode
+        ascii-encodable user_id to use as salt
+    """
+    password = ascii_unicode_to_bytes(password)
+    user_id = ascii_unicode_to_bytes(user_id)
+
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=user_id,
+        iterations=100000,
+        backend=default_backend(),
+    )
+    return base64.urlsafe_b64encode(kdf.derive(password))
+
+
+def derive_fallback_fernet_keys(passwords, user_id):
+    """
+    Derive a list of per-user Fernet keys from a list of master keys and a
+    username.
+
+    If a None is encountered in ``passwords``, it is forwarded.
+
+    Parameters
+    ----------
+    passwords : list[unicode]
+        List of ascii-encodable keys to derive.
+    user_id : unicode or None
+        ascii-encodable user_id to use as salt
+    """
+    # Normally I wouldn't advocate for these kinds of assertions, but we really
+    # really really don't want to mess up deriving encryption keys.
+    assert isinstance(passwords, (list, tuple)), \
+        "Expected list or tuple of keys, got %s." % type(passwords)
+
+    def derive_single_allow_none(k):
+        if k is None:
+            return None
+        return derive_single_fernet_key(k, user_id).decode('ascii')
+
+    return list(map(derive_single_allow_none, passwords))
+
+
+def no_password_crypto_factory():
+    """
+    Create and return a function suitable for passing as a crypto_factory to
+    ``pgcontents.utils.sync.reencrypt_all_users``
+
+    The factory here always returns NoEncryption().  This is useful when passed
+    as ``old_crypto_factory`` to a database that hasn't yet been encrypted.
+    """
+    def factory(user_id):
+        return NoEncryption()
+    return factory
+
+
+def single_password_crypto_factory(password):
+    """
+    Create and return a function suitable for passing as a crypto_factory to
+    ``pgcontents.utils.sync.reencrypt_all_users``
+
+    The factory here returns a ``FernetEncryption`` that uses a key derived
+    from ``password`` and salted with the supplied user_id.
+    """
+    def factory(user_id):
+        return FernetEncryption(
+            Fernet(derive_single_fernet_key(password, user_id))
+        )
+    return factory
