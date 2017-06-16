@@ -156,7 +156,7 @@ def derive_single_fernet_key(password, user_id):
     Parameters
     ----------
     password : unicode
-        List of ascii-encodable keys to derive.
+        ascii-encodable key to derive
     user_id : unicode
         ascii-encodable user_id to use as salt
     """
