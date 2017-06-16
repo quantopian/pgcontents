@@ -49,7 +49,7 @@ else:
     import notebook
     if notebook.version_info[0] >= 5:
         raise ImportError("Notebook versions 5 and up are not supported.")
-    
+
     from traitlets.config import Config
     from notebook.services.contents.checkpoints import (
         Checkpoints,
