@@ -548,14 +548,14 @@ def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
     return res
 
 
-def analyze_files(engine, crypto_factory, callback=lambda d: d,
-                  min_dt=None, max_dt=None):
+def analyze_files(engine, crypto_factory, min_dt=None, max_dt=None):
     """
-    Return a generator running a callback on decrypted files.
+    Create a generator of decrypted files.
 
     This function selects all current notebooks (optionally, falling within a
-    datetime range), decrypts them, and returns a generator yielding the return
-    values of the callback function.
+    datetime range), decrypts them, and returns a generator yielding dicts,
+    each containing a decoded notebook and metadata including the user,
+    filepath, and timestamp.
 
     Parameters
     ----------
@@ -565,9 +565,6 @@ def analyze_files(engine, crypto_factory, callback=lambda d: d,
         A function from user_id to an object providing the interface required
         by PostgresContentsManager.crypto.  Results of this will be used for
         decryption of the selected notebooks.
-    callback : function[dict], optional
-        A callback function acting on the row dict of each decrypted notebook.
-        Defaults to the identity function.
     min_dt : datetime.datetime, optional
         Minimum last modified datetime at which a file will be included.
     max_dt : datetime.datetime, optional
@@ -578,8 +575,7 @@ def analyze_files(engine, crypto_factory, callback=lambda d: d,
         where_conds.append(files.c.created_at >= min_dt)
     if max_dt is not None:
         where_conds.append(files.c.created_at < max_dt)
-    return _analyze_notebooks(files,
-                              engine, where_conds, crypto_factory, callback)
+    return _analyze_notebooks(files, engine, where_conds, crypto_factory)
 
 
 # =======================================
@@ -735,14 +731,14 @@ def purge_remote_checkpoints(db, user_id):
     )
 
 
-def analyze_checkpoints(engine, crypto_factory, callback=lambda d: d,
-                        min_dt=None, max_dt=None):
+def analyze_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
     """
-    Return a generator running a callback on decrypted remote checkpoints.
+    Create a generator of decrypted remote checkpoints.
 
     This function selects all notebook checkpoints (optionally, falling within
-    a datetime range), decrypts them, and returns a generator yielding the
-    return values of the callback function.
+    a datetime range), decrypts them, and returns a generator yielding dicts,
+    each containing a decoded notebook and metadata including the user,
+    filepath, and timestamp.
 
     Parameters
     ----------
@@ -752,9 +748,6 @@ def analyze_checkpoints(engine, crypto_factory, callback=lambda d: d,
         A function from user_id to an object providing the interface required
         by PostgresContentsManager.crypto.  Results of this will be used for
         decryption of the selected notebooks.
-    callback : function[dict], optional
-        A callback function acting on the row dict of each decrypted notebook.
-        Defaults to the identity function.
     min_dt : datetime.datetime, optional
         Minimum last modified datetime at which a file will be included.
     max_dt : datetime.datetime, optional
@@ -766,13 +759,13 @@ def analyze_checkpoints(engine, crypto_factory, callback=lambda d: d,
     if max_dt is not None:
         where_conds.append(remote_checkpoints.c.last_modified < max_dt)
     return _analyze_notebooks(remote_checkpoints,
-                              engine, where_conds, crypto_factory, callback)
+                              engine, where_conds, crypto_factory)
 
 
 # ====================
 # Files or Checkpoints
 # ====================
-def _analyze_notebooks(table, engine, where_conds, crypto_factory, callback):
+def _analyze_notebooks(table, engine, where_conds, crypto_factory):
     """
     See docstrings for `analyze_files` and `analyze_checkpoints`. `where_conds`
     should be a list of SQLAlchemy expressions, which are used as the
@@ -797,7 +790,7 @@ def _analyze_notebooks(table, engine, where_conds, crypto_factory, callback):
         for nb_row in nb_result:
             nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
             nb_dict['content'] = b64decode(nb_dict['content']).decode('utf-8')
-            yield callback(nb_dict)
+            yield nb_dict
 
 
 ##########################

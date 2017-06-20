@@ -229,18 +229,14 @@ class TestAnalyzeNotebooks(TestCase):
         split_dt = datetime.now()
         create_nbs(user_ids[1])
 
-        def file_callback(nb):
+        def process_files_nb(nb):
             """
-            Converts relevant files database column names to be compatible with
-            remote checkpoint database column names.
+            For notebook from files table, creates path by concatenating parent
+            and filename.
             """
-            return {
-                'user_id': nb['user_id'],
-                'path': nb['parent_name'] + nb['name'],
-                'content': nb['content'],
-            }
+            nb['path'] = nb['parent_name'] + nb['name']
 
-        def check_analyze_call(analyze_fn, kwargs, expect_users):
+        def check_analyze_call(analyze_fn, expect_users, kwargs={}):
             """
             Calls the given function and checks that all notebooks belonging to
             the specified users are found.
@@ -249,6 +245,8 @@ class TestAnalyzeNotebooks(TestCase):
             for user_id in expect_users:
                 path_record[user_id] = set()
             for result in analyze_fn(engine, crypto_factory, **kwargs):
+                if analyze_fn is analyze_files:
+                    process_files_nb(result)
                 self.assertIn(result['user_id'], expect_users)
 
                 # Converts the content result to a dict format matching the
@@ -270,21 +268,15 @@ class TestAnalyzeNotebooks(TestCase):
             """
             Checks the given function with different kwarg calls.
             """
-            if analyze_fn is analyze_files:
-                default_kwargs = {'callback': file_callback}
-            elif analyze_fn is analyze_checkpoints:
-                default_kwargs = {}
-            max_kwargs = default_kwargs.copy()
-            max_kwargs['max_dt'] = split_dt
-            min_kwargs = default_kwargs.copy()
-            min_kwargs['min_dt'] = split_dt
+            max_kwargs = {'max_dt': split_dt}
+            min_kwargs = {'min_dt': split_dt}
 
-            check_analyze_call(analyze_fn, default_kwargs, user_ids)
+            check_analyze_call(analyze_fn, user_ids)
             # User 0's notebooks were created before `split_dt`, so they'll be
             # found by the `max_dt` call; the opposite applies to User 1's
             # notebooks.
-            check_analyze_call(analyze_fn, max_kwargs, [user_ids[0]])
-            check_analyze_call(analyze_fn, min_kwargs, [user_ids[1]])
+            check_analyze_call(analyze_fn, [user_ids[0]], max_kwargs)
+            check_analyze_call(analyze_fn, [user_ids[1]], min_kwargs)
 
         check_analyze_fn(analyze_files)
         check_analyze_fn(analyze_checkpoints)
