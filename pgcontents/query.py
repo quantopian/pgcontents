@@ -1,6 +1,7 @@
 """
 Database Queries for PostgresContentsManager.
 """
+from base64 import b64decode
 from textwrap import dedent
 
 from sqlalchemy import (
@@ -547,6 +548,40 @@ def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
     return res
 
 
+def analyze_files(engine, crypto_factory, callback=lambda d: d,
+                  min_dt=None, max_dt=None):
+    """
+    Return a generator running a callback on decrypted files.
+
+    This function selects all current notebooks (optionally, falling within a
+    datetime range), decrypts them, and returns a generator yielding the return
+    values of the callback function.
+
+    Parameters
+    ----------
+    engine : SQLAlchemy.engine
+        Engine encapsulating database connections.
+    crypto_factory : function[str -> Any]
+        A function from user_id to an object providing the interface required
+        by PostgresContentsManager.crypto.  Results of this will be used for
+        decryption of the selected notebooks.
+    callback : function[dict], optional
+        A callback function acting on the row dict of each decrypted notebook.
+        Defaults to the identity function.
+    min_dt : datetime.datetime, optional
+        Minimum last modified datetime at which a file will be included.
+    max_dt : datetime.datetime, optional
+        Last modified datetime at and after which a file will be excluded.
+    """
+    where_conds = []
+    if min_dt is not None:
+        where_conds.append(files.c.created_at >= min_dt)
+    if max_dt is not None:
+        where_conds.append(files.c.created_at < max_dt)
+    return _analyze_notebooks(files,
+                              engine, where_conds, crypto_factory, callback)
+
+
 # =======================================
 # Checkpoints (PostgresCheckpoints)
 # =======================================
@@ -700,6 +735,71 @@ def purge_remote_checkpoints(db, user_id):
     )
 
 
+def analyze_checkpoints(engine, crypto_factory, callback=lambda d: d,
+                        min_dt=None, max_dt=None):
+    """
+    Return a generator running a callback on decrypted remote checkpoints.
+
+    This function selects all notebook checkpoints (optionally, falling within
+    a datetime range), decrypts them, and returns a generator yielding the
+    return values of the callback function.
+
+    Parameters
+    ----------
+    engine : SQLAlchemy.engine
+        Engine encapsulating database connections.
+    crypto_factory : function[str -> Any]
+        A function from user_id to an object providing the interface required
+        by PostgresContentsManager.crypto.  Results of this will be used for
+        decryption of the selected notebooks.
+    callback : function[dict], optional
+        A callback function acting on the row dict of each decrypted notebook.
+        Defaults to the identity function.
+    min_dt : datetime.datetime, optional
+        Minimum last modified datetime at which a file will be included.
+    max_dt : datetime.datetime, optional
+        Last modified datetime at and after which a file will be excluded.
+    """
+    where_conds = []
+    if min_dt is not None:
+        where_conds.append(remote_checkpoints.c.last_modified >= min_dt)
+    if max_dt is not None:
+        where_conds.append(remote_checkpoints.c.last_modified < max_dt)
+    return _analyze_notebooks(remote_checkpoints,
+                              engine, where_conds, crypto_factory, callback)
+
+
+# ====================
+# Files or Checkpoints
+# ====================
+def _analyze_notebooks(table, engine, where_conds, crypto_factory, callback):
+    """
+    See docstrings for `analyze_files` and `analyze_checkpoints`. `where_conds`
+    should be a list of SQLAlchemy expressions, which are used as the
+    conditions for WHERE clauses on the SELECT queries to the database.
+    """
+    # Generate a list of users with relevant notebooks.
+    user_q = select([table.c.user_id]).distinct()
+    for cond in where_conds:
+        user_q = user_q.where(cond)
+    user_result = engine.execute(user_q)
+
+    # Select the target notebooks by user.
+    for user_id_row in user_result:
+        user_id = user_id_row[0]
+        decrypt_func = crypto_factory(user_id).decrypt
+        nb_q = select([table]).where(table.c.user_id == user_id)
+        for cond in where_conds:
+            nb_q = nb_q.where(cond)
+        nb_result = engine.execute(nb_q)
+
+        # Decrypt each notebook and run the callback.
+        for nb_row in nb_result:
+            nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
+            nb_dict['content'] = b64decode(nb_dict['content']).decode('utf-8')
+            yield callback(nb_dict)
+
+
 ##########################
 # Reencryption Utilities #
 ##########################
@@ -776,7 +876,6 @@ def reencrypt_user_content(engine,
         # file-reencryption process, but we might not see that checkpoint here,
         # which means that we would never update the content of that checkpoint
         # to the new encryption key.
-
         logger.info("Re-encrypting files for %s", user_id)
         for (file_id,) in select_file_ids(db, user_id):
             reencrypt_row_content(

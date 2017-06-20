@@ -3,6 +3,7 @@ Tests for synchronization tools.
 """
 from __future__ import unicode_literals
 from base64 import b64encode
+from datetime import datetime
 from logging import Logger
 from unittest import TestCase
 
@@ -10,8 +11,14 @@ from cryptography.fernet import Fernet
 from sqlalchemy import create_engine
 
 from pgcontents import PostgresContentsManager
-from pgcontents.crypto import FernetEncryption, NoEncryption
-from pgcontents.utils.ipycompat import new_markdown_cell
+from pgcontents.api_utils import NBFORMAT_VERSION
+from pgcontents.crypto import (
+    FernetEncryption,
+    NoEncryption,
+    single_password_crypto_factory,
+)
+from pgcontents.query import analyze_files, analyze_checkpoints
+from pgcontents.utils.ipycompat import new_markdown_cell, reads
 
 from .utils import (
     assertRaisesHTTPError,
@@ -177,3 +184,107 @@ class TestReEncryption(TestCase):
         # crypto manager.
         unencrypt_all_users(engine, crypto2_factory, logger)
         check_reencryption(manager2, no_crypto_manager)
+
+
+class TestAnalyzeNotebooks(TestCase):
+
+    def setUp(self):
+        remigrate_test_schema()
+
+    def tearDown(self):
+        clear_test_db()
+
+    def test_analyze_notebooks(self):
+        """
+        Creates files and checkpoints for two users and checks their
+        accessibility through `analyze_files` and `analyze_checkpoints`.
+        """
+        db_url = TEST_DB_URL
+        engine = create_engine(db_url)
+        user_ids = ['test_analyze_notebooks0', 'test_analyze_notebooks1']
+        encryption_pw = u'foobar'
+
+        crypto_factory = single_password_crypto_factory(encryption_pw)
+        managers = {}
+        for user_id in user_ids:
+            managers[user_id] = PostgresContentsManager(
+                user_id=user_id,
+                db_url=db_url,
+                crypto=crypto_factory(user_id),
+                create_user_on_startup=True,
+            )
+        paths = {}
+
+        def create_nbs(user_id):
+            """
+            Create test notebooks and create a checkpoint for each.
+            """
+            paths[user_id] = set(populate(managers[user_id]))
+            for path in paths[user_id]:
+                managers[user_id].create_checkpoint(path)
+
+        # Create test files/remote checkpoints for both users, their creation
+        # times separated by a recorded datetime.
+        create_nbs(user_ids[0])
+        split_dt = datetime.now()
+        create_nbs(user_ids[1])
+
+        def file_callback(nb):
+            """
+            Converts relevant files database column names to be compatible with
+            remote checkpoint database column names.
+            """
+            return {
+                'user_id': nb['user_id'],
+                'path': nb['parent_name'] + nb['name'],
+                'content': nb['content'],
+            }
+
+        def check_analyze_call(analyze_fn, kwargs, expect_users):
+            """
+            Calls the given function and checks that all notebooks belonging to
+            the specified users are found.
+            """
+            path_record = {}
+            for user_id in expect_users:
+                path_record[user_id] = set()
+            for result in analyze_fn(engine, crypto_factory, **kwargs):
+                self.assertIn(result['user_id'], expect_users)
+
+                # Converts the content result to a dict format matching the
+                # return value of `PostgresContentManager.get()`.
+                nb = reads(result['content'], as_version=NBFORMAT_VERSION)
+                managers[result['user_id']].mark_trusted_cells(nb,
+                                                               result['path'])
+                self.assertDictEqual(
+                    managers[result['user_id']].get(result['path'])['content'],
+                    nb
+                )
+                path_record[result['user_id']].add(result['path'][1:])
+
+            # Makes sure all notebooks were found.
+            for user_id in expect_users:
+                self.assertSetEqual(path_record[user_id], paths[user_id])
+
+        def check_analyze_fn(analyze_fn):
+            """
+            Checks the given function with different kwarg calls.
+            """
+            if analyze_fn is analyze_files:
+                default_kwargs = {'callback': file_callback}
+            elif analyze_fn is analyze_checkpoints:
+                default_kwargs = {}
+            max_kwargs = default_kwargs.copy()
+            max_kwargs['max_dt'] = split_dt
+            min_kwargs = default_kwargs.copy()
+            min_kwargs['min_dt'] = split_dt
+
+            check_analyze_call(analyze_fn, default_kwargs, user_ids)
+            # User 0's notebooks were created before `split_dt`, so they'll be
+            # found by the `max_dt` call; the opposite applies to User 1's
+            # notebooks.
+            check_analyze_call(analyze_fn, max_kwargs, [user_ids[0]])
+            check_analyze_call(analyze_fn, min_kwargs, [user_ids[1]])
+
+        check_analyze_fn(analyze_files)
+        check_analyze_fn(analyze_checkpoints)
