@@ -17,7 +17,7 @@ from pgcontents.crypto import (
     NoEncryption,
     single_password_crypto_factory,
 )
-from pgcontents.query import analyze_files, analyze_checkpoints
+from pgcontents.query import generate_files, generate_checkpoints
 from pgcontents.utils.ipycompat import new_markdown_cell, reads
 
 from .utils import (
@@ -186,7 +186,7 @@ class TestReEncryption(TestCase):
         check_reencryption(manager2, no_crypto_manager)
 
 
-class TestAnalyzeNotebooks(TestCase):
+class TestGenerateNotebooks(TestCase):
 
     def setUp(self):
         remigrate_test_schema()
@@ -194,14 +194,14 @@ class TestAnalyzeNotebooks(TestCase):
     def tearDown(self):
         clear_test_db()
 
-    def test_analyze_notebooks(self):
+    def test_generate_notebooks(self):
         """
         Creates files and checkpoints for two users and checks their
-        accessibility through `analyze_files` and `analyze_checkpoints`.
+        accessibility through `generate_files` and `generate_checkpoints`.
         """
         db_url = TEST_DB_URL
         engine = create_engine(db_url)
-        user_ids = ['test_analyze_notebooks0', 'test_analyze_notebooks1']
+        user_ids = ['test_generate_notebooks0', 'test_generate_notebooks1']
         encryption_pw = u'foobar'
 
         crypto_factory = single_password_crypto_factory(encryption_pw)
@@ -236,7 +236,7 @@ class TestAnalyzeNotebooks(TestCase):
             """
             nb['path'] = nb['parent_name'] + nb['name']
 
-        def check_analyze_call(analyze_fn, expect_users, kwargs={}):
+        def check_generate_call(generate_fn, expect_users, kwargs={}):
             """
             Calls the given function and checks that all notebooks belonging to
             the specified users are found.
@@ -244,8 +244,8 @@ class TestAnalyzeNotebooks(TestCase):
             path_record = {}
             for user_id in expect_users:
                 path_record[user_id] = set()
-            for result in analyze_fn(engine, crypto_factory, **kwargs):
-                if analyze_fn is analyze_files:
+            for result in generate_fn(engine, crypto_factory, **kwargs):
+                if generate_fn is generate_files:
                     process_files_nb(result)
                 self.assertIn(result['user_id'], expect_users)
 
@@ -254,7 +254,7 @@ class TestAnalyzeNotebooks(TestCase):
                 nb = reads(result['content'], as_version=NBFORMAT_VERSION)
                 managers[result['user_id']].mark_trusted_cells(nb,
                                                                result['path'])
-                self.assertDictEqual(
+                self.assertEqual(
                     managers[result['user_id']].get(result['path'])['content'],
                     nb
                 )
@@ -262,21 +262,21 @@ class TestAnalyzeNotebooks(TestCase):
 
             # Makes sure all notebooks were found.
             for user_id in expect_users:
-                self.assertSetEqual(path_record[user_id], paths[user_id])
+                self.assertEqual(path_record[user_id], paths[user_id])
 
-        def check_analyze_fn(analyze_fn):
+        def check_generate_fn(generate_fn):
             """
             Checks the given function with different kwarg calls.
             """
             max_kwargs = {'max_dt': split_dt}
             min_kwargs = {'min_dt': split_dt}
 
-            check_analyze_call(analyze_fn, user_ids)
+            check_generate_call(generate_fn, user_ids)
             # User 0's notebooks were created before `split_dt`, so they'll be
             # found by the `max_dt` call; the opposite applies to User 1's
             # notebooks.
-            check_analyze_call(analyze_fn, [user_ids[0]], max_kwargs)
-            check_analyze_call(analyze_fn, [user_ids[1]], min_kwargs)
+            check_generate_call(generate_fn, [user_ids[0]], max_kwargs)
+            check_generate_call(generate_fn, [user_ids[1]], min_kwargs)
 
-        check_analyze_fn(analyze_files)
-        check_analyze_fn(analyze_checkpoints)
+        check_generate_fn(generate_files)
+        check_generate_fn(generate_checkpoints)

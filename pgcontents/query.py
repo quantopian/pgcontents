@@ -548,7 +548,7 @@ def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
     return res
 
 
-def analyze_files(engine, crypto_factory, min_dt=None, max_dt=None):
+def generate_files(engine, crypto_factory, min_dt=None, max_dt=None):
     """
     Create a generator of decrypted files.
 
@@ -575,7 +575,7 @@ def analyze_files(engine, crypto_factory, min_dt=None, max_dt=None):
         where_conds.append(files.c.created_at >= min_dt)
     if max_dt is not None:
         where_conds.append(files.c.created_at < max_dt)
-    return _analyze_notebooks(files, engine, where_conds, crypto_factory)
+    return _generate_notebooks(files, engine, where_conds, crypto_factory)
 
 
 # =======================================
@@ -731,7 +731,7 @@ def purge_remote_checkpoints(db, user_id):
     )
 
 
-def analyze_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
+def generate_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
     """
     Create a generator of decrypted remote checkpoints.
 
@@ -758,18 +758,18 @@ def analyze_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
         where_conds.append(remote_checkpoints.c.last_modified >= min_dt)
     if max_dt is not None:
         where_conds.append(remote_checkpoints.c.last_modified < max_dt)
-    return _analyze_notebooks(remote_checkpoints,
-                              engine, where_conds, crypto_factory)
+    return _generate_notebooks(remote_checkpoints,
+                               engine, where_conds, crypto_factory)
 
 
 # ====================
 # Files or Checkpoints
 # ====================
-def _analyze_notebooks(table, engine, where_conds, crypto_factory):
+def _generate_notebooks(table, engine, where_conds, crypto_factory):
     """
-    See docstrings for `analyze_files` and `analyze_checkpoints`. `where_conds`
-    should be a list of SQLAlchemy expressions, which are used as the
-    conditions for WHERE clauses on the SELECT queries to the database.
+    See docstrings for `generate_files` and `generate_checkpoints`.
+    `where_conds` should be a list of SQLAlchemy expressions, which are used as
+    the conditions for WHERE clauses on the SELECT queries to the database.
     """
     # Generate a list of users with relevant notebooks.
     user_q = select([table.c.user_id]).distinct()
