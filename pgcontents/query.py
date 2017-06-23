@@ -786,7 +786,7 @@ def _generate_notebooks(table, engine, where_conds, crypto_factory):
             nb_q = nb_q.where(cond)
         nb_result = engine.execute(nb_q)
 
-        # Decrypt each notebook and run the callback.
+        # Decrypt each notebook and yield the result.
         for nb_row in nb_result:
             nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
             nb_dict['content'] = b64decode(nb_dict['content']).decode('utf-8')

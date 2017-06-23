@@ -190,93 +190,102 @@ class TestGenerateNotebooks(TestCase):
 
     def setUp(self):
         remigrate_test_schema()
+        self.db_url = TEST_DB_URL
+        self.engine = create_engine(self.db_url)
+        encryption_pw = u'foobar'
+        self.crypto_factory = single_password_crypto_factory(encryption_pw)
 
     def tearDown(self):
         clear_test_db()
 
-    def test_generate_notebooks(self):
+    def populate_users(self, user_ids):
         """
-        Creates files and checkpoints for two users and checks their
-        accessibility through `generate_files` and `generate_checkpoints`.
+        Create a `PostgresContentsManager` and notebooks for each user.
         """
-        db_url = TEST_DB_URL
-        engine = create_engine(db_url)
-        user_ids = ['test_generate_notebooks0', 'test_generate_notebooks1']
-        encryption_pw = u'foobar'
-
-        crypto_factory = single_password_crypto_factory(encryption_pw)
-        managers = {}
-        for user_id in user_ids:
-            managers[user_id] = PostgresContentsManager(
+        def encrypted_pgmanager(user_id):
+            return PostgresContentsManager(
                 user_id=user_id,
-                db_url=db_url,
-                crypto=crypto_factory(user_id),
+                db_url=self.db_url,
+                crypto=self.crypto_factory(user_id),
                 create_user_on_startup=True,
             )
-        paths = {}
+        managers = {user_id: encrypted_pgmanager(user_id)
+                    for user_id in user_ids}
+        paths = {user_id: populate(managers[user_id]) for user_id in user_ids}
+        return (managers, paths)
 
-        def create_nbs(user_id):
-            """
-            Create test notebooks and create a checkpoint for each.
-            """
-            paths[user_id] = set(populate(managers[user_id]))
-            for path in paths[user_id]:
-                managers[user_id].create_checkpoint(path)
+    def test_generate_files(self):
+        """
+        Create files for three users; try fetching them using `generate_files`.
+        """
+        user_ids = ['test_generate_files0',
+                    'test_generate_files1',
+                    'test_generate_files2']
+        (managers, paths) = self.populate_users(user_ids)
 
-        # Create test files/remote checkpoints for both users, their creation
-        # times separated by a recorded datetime.
-        create_nbs(user_ids[0])
-        split_dt = datetime.now()
-        create_nbs(user_ids[1])
+        def get_file_dt(user_id, idx):
+            path = paths[user_id][idx]
+            return managers[user_id].get(path, content=False)['last_modified']
 
-        def process_files_nb(nb):
-            """
-            For notebook from files table, creates path by concatenating parent
-            and filename.
-            """
-            nb['path'] = nb['parent_name'] + nb['name']
+        # Find a split datetime midway through each user's list of files
+        split_idx = len(paths[user_ids[0]]) // 2
+        split_dts = [get_file_dt(user_id, split_idx) for user_id in user_ids]
 
-        def check_generate_call(generate_fn, expect_users, kwargs={}):
+        def check_call(kwargs, expect_files_by_user):
             """
-            Calls the given function and checks that all notebooks belonging to
-            the specified users are found.
+            Call `generate_files`; check that all expected files are found.
             """
-            path_record = {}
-            for user_id in expect_users:
-                path_record[user_id] = set()
-            for result in generate_fn(engine, crypto_factory, **kwargs):
-                if generate_fn is generate_files:
-                    process_files_nb(result)
-                self.assertIn(result['user_id'], expect_users)
+            file_record = {user_id: set() for user_id in expect_files_by_user}
+            for result in generate_files(self.engine, self.crypto_factory,
+                                         **kwargs):
+                manager = managers[result['user_id']]
+                path = (result['parent_name'][1:]  # Slice to strip leading '/'
+                        + result['name'])
 
-                # Converts the content result to a dict format matching the
-                # return value of `PostgresContentManager.get()`.
+                # Check that this file is expected
+                self.assertIn(path, expect_files_by_user[result['user_id']])
+
+                # Convert the content result to a dict format matching the
+                # return value of `PostgresContentManager.get()`
                 nb = reads(result['content'], as_version=NBFORMAT_VERSION)
-                managers[result['user_id']].mark_trusted_cells(nb,
-                                                               result['path'])
-                self.assertEqual(
-                    managers[result['user_id']].get(result['path'])['content'],
-                    nb
-                )
-                path_record[result['user_id']].add(result['path'][1:])
+                manager.mark_trusted_cells(nb, path)
 
-            # Makes sure all notebooks were found.
-            for user_id in expect_users:
-                self.assertEqual(path_record[user_id], paths[user_id])
+                # Check that the content returned by the pgcontents manager
+                # matches that returned by `generate_files`
+                self.assertEqual(manager.get(path)['content'], nb)
 
-        def check_generate_fn(generate_fn):
-            """
-            Checks the given function with different kwarg calls.
-            """
-            max_kwargs = {'max_dt': split_dt}
-            min_kwargs = {'min_dt': split_dt}
+                file_record[result['user_id']].add(path)
 
-            check_generate_call(generate_fn, user_ids)
-            # User 0's notebooks were created before `split_dt`, so they'll be
-            # found by the `max_dt` call; the opposite applies to User 1's
-            # notebooks.
-            check_generate_call(generate_fn, [user_ids[0]], max_kwargs)
-            check_generate_call(generate_fn, [user_ids[1]], min_kwargs)
+            # Make sure all files were found
+            for user_id in expect_files_by_user:
+                self.assertEqual(file_record[user_id],
+                                 set(expect_files_by_user[user_id]))
 
-        check_generate_fn(generate_files)
-        check_generate_fn(generate_checkpoints)
+        check_call({}, paths)  # Expect all files with no min/max
+
+        # Expect half of 1's files and all of 2's files
+        # when `min_dt` is the middle split dt
+        check_call({'min_dt': split_dts[1]},
+                   {
+                       user_ids[0]: [],
+                       user_ids[1]: paths[user_ids[1]][split_idx:],
+                       user_ids[2]: paths[user_ids[2]],
+                   })
+
+        # Expect all of 0's files and half of 1's files
+        # when `max_dt` is the middle split dt
+        check_call({'max_dt': split_dts[1]},
+                   {
+                       user_ids[0]: paths[user_ids[0]],
+                       user_ids[1]: paths[user_ids[1]][:split_idx],
+                       user_ids[2]: [],
+                   })
+
+        # Expect half of 0's and 2's files and all of 1's files
+        # when `min_dt` is the early split dt and `max_dt` is the late split dt
+        check_call({'min_dt': split_dts[0], 'max_dt': split_dts[2]},
+                   {
+                       user_ids[0]: paths[user_ids[0]][split_idx:],
+                       user_ids[1]: paths[user_ids[1]],
+                       user_ids[2]: paths[user_ids[2]][:split_idx],
+                   })
