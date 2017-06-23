@@ -3,7 +3,6 @@ Tests for synchronization tools.
 """
 from __future__ import unicode_literals
 from base64 import b64encode
-from datetime import datetime
 from logging import Logger
 from unittest import TestCase
 
@@ -233,7 +232,8 @@ class TestGenerateNotebooks(TestCase):
 
         def check_call(kwargs, expect_files_by_user):
             """
-            Call `generate_files`; check that all expected files are found.
+            Call `generate_files`; check that all expected files are found,
+            with the correct content.
             """
             file_record = {user_id: set() for user_id in expect_files_by_user}
             for result in generate_files(self.engine, self.crypto_factory,
@@ -242,9 +242,6 @@ class TestGenerateNotebooks(TestCase):
                 path = (result['parent_name'][1:]  # Slice to strip leading '/'
                         + result['name'])
 
-                # Check that this file is expected
-                self.assertIn(path, expect_files_by_user[result['user_id']])
-
                 # Convert the content result to a dict format matching the
                 # return value of `PostgresContentManager.get()`
                 nb = reads(result['content'], as_version=NBFORMAT_VERSION)
@@ -252,7 +249,7 @@ class TestGenerateNotebooks(TestCase):
 
                 # Check that the content returned by the pgcontents manager
                 # matches that returned by `generate_files`
-                self.assertEqual(manager.get(path)['content'], nb)
+                self.assertEqual(nb, manager.get(path)['content'])
 
                 file_record[result['user_id']].add(path)
 
@@ -261,10 +258,11 @@ class TestGenerateNotebooks(TestCase):
                 self.assertEqual(file_record[user_id],
                                  set(expect_files_by_user[user_id]))
 
-        check_call({}, paths)  # Expect all files with no min/max
+        # Expect all files given no `min_dt`/`max_dt`
+        check_call({}, paths)
 
-        # Expect half of 1's files and all of 2's files
-        # when `min_dt` is the middle split dt
+        # `min_dt` is in the middle of 1's files; we get the latter half of 1's
+        # and all of 2's
         check_call({'min_dt': split_dts[1]},
                    {
                        user_ids[0]: [],
@@ -272,8 +270,8 @@ class TestGenerateNotebooks(TestCase):
                        user_ids[2]: paths[user_ids[2]],
                    })
 
-        # Expect all of 0's files and half of 1's files
-        # when `max_dt` is the middle split dt
+        # `max_dt` is in the middle of 1's files; we get all of 0's and the
+        # beginning half of 1's
         check_call({'max_dt': split_dts[1]},
                    {
                        user_ids[0]: paths[user_ids[0]],
@@ -281,11 +279,117 @@ class TestGenerateNotebooks(TestCase):
                        user_ids[2]: [],
                    })
 
-        # Expect half of 0's and 2's files and all of 1's files
-        # when `min_dt` is the early split dt and `max_dt` is the late split dt
+        # `min_dt` is in the middle of 0's files cutting off 0's beginning half
+        # `max_dt` is in the middle of 2's files cutting off 2's latter half
         check_call({'min_dt': split_dts[0], 'max_dt': split_dts[2]},
                    {
                        user_ids[0]: paths[user_ids[0]][split_idx:],
                        user_ids[1]: paths[user_ids[1]],
                        user_ids[2]: paths[user_ids[2]][:split_idx],
                    })
+
+    def test_generate_checkpoints(self):
+        """
+        Create checkpoints in three stages; try fetching them with
+        `generate_checkpoints`.
+        """
+        user_ids = ['test_generate_checkpoints0',
+                    'test_generate_checkpoints1',
+                    'test_generate_checkpoints2']
+        (managers, paths) = self.populate_users(user_ids)
+
+        def update_content(user_id, path, text):
+            """
+            Add a Markdown cell and save the notebook.
+
+            Returns the new notebook content.
+            """
+            manager = managers[user_id]
+            model = manager.get(path)
+            model['content'].cells.append(
+                new_markdown_cell(text + ' on path: ' + path)
+            )
+            manager.save(model, path)
+            return manager.get(path)['content']
+
+        # Each of the next three steps creates a checkpoint for each notebook
+        # and stores the notebook content in a dict, keyed by the user id,
+        # the path, and the datetime of the new checkpoint.
+
+        # Begin by making a checkpoint for the original notebook content.
+        beginning_content = {}
+        for user_id in user_ids:
+            for path in paths[user_id]:
+                content = managers[user_id].get(path)['content']
+                dt = managers[user_id].create_checkpoint(path)['last_modified']
+                beginning_content[user_id, path, dt] = content
+
+        # Update each notebook and make a new checkpoint.
+        middle_content = {}
+        middle_min_dt = None
+        for user_id in user_ids:
+            for path in paths[user_id]:
+                content = update_content(user_id, path, '1st addition')
+                dt = managers[user_id].create_checkpoint(path)['last_modified']
+                middle_content[user_id, path, dt] = content
+                if middle_min_dt is None:
+                    middle_min_dt = dt
+
+        # Update each notebook again and make another checkpoint.
+        end_content = {}
+        end_min_dt = None
+        for user_id in user_ids:
+            for path in paths[user_id]:
+                content = update_content(user_id, path, '2nd addition')
+                dt = managers[user_id].create_checkpoint(path)['last_modified']
+                end_content[user_id, path, dt] = content
+                if end_min_dt is None:
+                    end_min_dt = dt
+
+        def merge_dicts(*args):
+            result = {}
+            for d in args:
+                result.update(d)
+            return result
+
+        def check_call(kwargs, expect_checkpoints_content):
+            """
+            Call `generate_checkpoints`; check that all expected checkpoints
+            are found, with the correct content.
+            """
+            expect_checkpoints = set(expect_checkpoints_content.keys())
+            checkpoint_record = set()
+            for result in generate_checkpoints(self.engine,
+                                               self.crypto_factory, **kwargs):
+                manager = managers[result['user_id']]
+                path = result['path'][1:]  # Slice to strip leading '/'
+
+                # Convert the content result to a dict format matching the
+                # return value of `PostgresContentManager.get()`
+                nb = reads(result['content'], as_version=NBFORMAT_VERSION)
+                manager.mark_trusted_cells(nb, path)
+
+                # Check that the checkpoint content matches what's expected
+                key = (result['user_id'], path, result['last_modified'])
+                self.assertEqual(nb, expect_checkpoints_content[key])
+
+                checkpoint_record.add(key)
+
+            # Make sure all checkpoints were found
+            self.assertEqual(checkpoint_record, expect_checkpoints)
+
+        # No `min_dt`/`max_dt`
+        check_call({}, merge_dicts(beginning_content,
+                                   middle_content, end_content))
+
+        # `min_dt` cuts off `beginning_content` checkpoints
+        check_call({'min_dt': middle_min_dt},
+                   merge_dicts(middle_content, end_content))
+
+        # `max_dt` cuts off `end_content` checkpoints
+        check_call({'max_dt': end_min_dt},
+                   merge_dicts(beginning_content, middle_content))
+
+        # `min_dt` and `max_dt` together isolate `middle_content`
+        check_call({'min_dt': middle_min_dt, 'max_dt': end_min_dt},
+                   middle_content)
