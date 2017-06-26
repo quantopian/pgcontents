@@ -1,7 +1,6 @@
 """
 Database Queries for PostgresContentsManager.
 """
-from base64 import b64decode
 from textwrap import dedent
 
 from sqlalchemy import (
@@ -19,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from .api_utils import (
     from_api_dirname,
     from_api_filename,
+    reads_base64,
     split_api_filepath,
 )
 from .constants import UNLIMITED
@@ -789,8 +789,16 @@ def _generate_notebooks(table, engine, where_conds, crypto_factory):
         # Decrypt each notebook and yield the result.
         for nb_row in nb_result:
             nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
-            nb_dict['content'] = b64decode(nb_dict['content']).decode('utf-8')
-            yield nb_dict
+            if table is files:
+                nb_dict['path'] = nb_dict['parent_name'] + nb_dict['name']
+                nb_dict['last_modified'] = nb_dict['created_at']
+            yield {
+                'id': nb_dict['id'],
+                'user_id': nb_dict['user_id'],
+                'path': nb_dict['path'],
+                'last_modified': nb_dict['last_modified'],
+                'content': reads_base64(nb_dict['content']),
+            }
 
 
 ##########################

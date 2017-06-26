@@ -10,14 +10,13 @@ from cryptography.fernet import Fernet
 from sqlalchemy import create_engine
 
 from pgcontents import PostgresContentsManager
-from pgcontents.api_utils import NBFORMAT_VERSION
 from pgcontents.crypto import (
     FernetEncryption,
     NoEncryption,
     single_password_crypto_factory,
 )
 from pgcontents.query import generate_files, generate_checkpoints
-from pgcontents.utils.ipycompat import new_markdown_cell, reads
+from pgcontents.utils.ipycompat import new_markdown_cell
 
 from .utils import (
     assertRaisesHTTPError,
@@ -239,12 +238,11 @@ class TestGenerateNotebooks(TestCase):
             for result in generate_files(self.engine, self.crypto_factory,
                                          **kwargs):
                 manager = managers[result['user_id']]
-                path = (result['parent_name'][1:]  # Slice to strip leading '/'
-                        + result['name'])
+                path = result['path'][1:]  # Slice to strip leading '/'
 
                 # Convert the content result to a dict format matching the
                 # return value of `PostgresContentManager.get()`
-                nb = reads(result['content'], as_version=NBFORMAT_VERSION)
+                nb = result['content']
                 manager.mark_trusted_cells(nb, path)
 
                 # Check that the content returned by the pgcontents manager
@@ -366,7 +364,7 @@ class TestGenerateNotebooks(TestCase):
 
                 # Convert the content result to a dict format matching the
                 # return value of `PostgresContentManager.get()`
-                nb = reads(result['content'], as_version=NBFORMAT_VERSION)
+                nb = result['content']
                 manager.mark_trusted_cells(nb, path)
 
                 # Check that the checkpoint content matches what's expected
