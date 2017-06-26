@@ -771,34 +771,33 @@ def _generate_notebooks(table, engine, where_conds, crypto_factory):
     `where_conds` should be a list of SQLAlchemy expressions, which are used as
     the conditions for WHERE clauses on the SELECT queries to the database.
     """
-    # Generate a list of users with relevant notebooks.
-    user_q = select([table.c.user_id]).distinct()
+    # Query for notebooks satisfying the conditions.
+    query = select([table]).order_by(table.c.user_id)
     for cond in where_conds:
-        user_q = user_q.where(cond)
-    user_result = engine.execute(user_q)
+        query = query.where(cond)
+    result = engine.execute(query)
 
-    # Select the target notebooks by user.
-    for user_id_row in user_result:
-        user_id = user_id_row[0]
-        decrypt_func = crypto_factory(user_id).decrypt
-        nb_q = select([table]).where(table.c.user_id == user_id)
-        for cond in where_conds:
-            nb_q = nb_q.where(cond)
-        nb_result = engine.execute(nb_q)
+    # Decrypt each notebook and yield the result.
+    last_user_id = None
+    for nb_row in result:
+        # The decrypt function depends on the user, so if the user is the same
+        # then the decrypt function carries over.
+        if nb_row['user_id'] != last_user_id:
+            decrypt_func = crypto_factory(nb_row['user_id']).decrypt
+            last_user_id = nb_row['user_id']
 
-        # Decrypt each notebook and yield the result.
-        for nb_row in nb_result:
-            nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
-            if table is files:
-                nb_dict['path'] = nb_dict['parent_name'] + nb_dict['name']
-                nb_dict['last_modified'] = nb_dict['created_at']
-            yield {
-                'id': nb_dict['id'],
-                'user_id': nb_dict['user_id'],
-                'path': nb_dict['path'],
-                'last_modified': nb_dict['last_modified'],
-                'content': reads_base64(nb_dict['content']),
-            }
+        nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
+        if table is files:
+            # Correct for files schema differing somewhat from checkpoints.
+            nb_dict['path'] = nb_dict['parent_name'] + nb_dict['name']
+            nb_dict['last_modified'] = nb_dict['created_at']
+        yield {
+            'id': nb_dict['id'],
+            'user_id': nb_dict['user_id'],
+            'path': nb_dict['path'],
+            'last_modified': nb_dict['last_modified'],
+            'content': reads_base64(nb_dict['content']),
+        }
 
 
 ##########################
