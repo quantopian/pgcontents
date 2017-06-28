@@ -792,6 +792,10 @@ def _generate_notebooks(table, engine, where_conds, crypto_factory):
             # Correct for files schema differing somewhat from checkpoints.
             nb_dict['path'] = nb_dict['parent_name'] + nb_dict['name']
             nb_dict['last_modified'] = nb_dict['created_at']
+
+        # For 'content', we use `reads_base64` directly. If the db content
+        # format is changed from base64, the decoding should be changed
+        # here as well.
         yield {
             'id': nb_dict['id'],
             'user_id': nb_dict['user_id'],

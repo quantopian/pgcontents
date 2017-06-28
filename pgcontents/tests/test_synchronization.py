@@ -239,8 +239,9 @@ class TestGenerateNotebooks(TestCase):
                                          **kwargs):
                 manager = managers[result['user_id']]
 
-                # Convert the content result to a dict format matching the
-                # return value of `PostgresContentManager.get()`
+                # This recreates functionality from
+                # `manager._notebook_model_from_db` to match with the model
+                # returned by `manager.get`.
                 nb = result['content']
                 manager.mark_trusted_cells(nb, result['path'])
 
@@ -360,8 +361,9 @@ class TestGenerateNotebooks(TestCase):
                                                self.crypto_factory, **kwargs):
                 manager = managers[result['user_id']]
 
-                # Convert the content result to a dict format matching the
-                # return value of `PostgresContentManager.get()`
+                # This recreates functionality from
+                # `manager._notebook_model_from_db` to match with the model
+                # returned by `manager.get`.
                 nb = result['content']
                 manager.mark_trusted_cells(nb, result['path'])
 
