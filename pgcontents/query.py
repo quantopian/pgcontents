@@ -20,6 +20,7 @@ from .api_utils import (
     from_api_filename,
     reads_base64,
     split_api_filepath,
+    to_api_path,
 )
 from .constants import UNLIMITED
 from .db_utils import (
@@ -794,7 +795,7 @@ def _generate_notebooks(table, engine, where_conds, crypto_factory):
         yield {
             'id': nb_dict['id'],
             'user_id': nb_dict['user_id'],
-            'path': nb_dict['path'],
+            'path': to_api_path(nb_dict['path']),
             'last_modified': nb_dict['last_modified'],
             'content': reads_base64(nb_dict['content']),
         }

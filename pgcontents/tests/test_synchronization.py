@@ -234,27 +234,26 @@ class TestGenerateNotebooks(TestCase):
             Call `generate_files`; check that all expected files are found,
             with the correct content.
             """
-            file_record = {user_id: set() for user_id in expect_files_by_user}
+            file_record = {user_id: [] for user_id in expect_files_by_user}
             for result in generate_files(self.engine, self.crypto_factory,
                                          **kwargs):
                 manager = managers[result['user_id']]
-                path = result['path'][1:]  # Slice to strip leading '/'
 
                 # Convert the content result to a dict format matching the
                 # return value of `PostgresContentManager.get()`
                 nb = result['content']
-                manager.mark_trusted_cells(nb, path)
+                manager.mark_trusted_cells(nb, result['path'])
 
                 # Check that the content returned by the pgcontents manager
                 # matches that returned by `generate_files`
-                self.assertEqual(nb, manager.get(path)['content'])
+                self.assertEqual(nb, manager.get(result['path'])['content'])
 
-                file_record[result['user_id']].add(path)
+                file_record[result['user_id']].append(result['path'])
 
             # Make sure all files were found
             for user_id in expect_files_by_user:
-                self.assertEqual(file_record[user_id],
-                                 set(expect_files_by_user[user_id]))
+                self.assertEqual(sorted(file_record[user_id]),
+                                 sorted(expect_files_by_user[user_id]))
 
         # Expect all files given no `min_dt`/`max_dt`
         check_call({}, paths)
@@ -355,26 +354,27 @@ class TestGenerateNotebooks(TestCase):
             Call `generate_checkpoints`; check that all expected checkpoints
             are found, with the correct content.
             """
-            expect_checkpoints = set(expect_checkpoints_content.keys())
-            checkpoint_record = set()
+            expect_checkpoints = expect_checkpoints_content.keys()
+            checkpoint_record = []
             for result in generate_checkpoints(self.engine,
                                                self.crypto_factory, **kwargs):
                 manager = managers[result['user_id']]
-                path = result['path'][1:]  # Slice to strip leading '/'
 
                 # Convert the content result to a dict format matching the
                 # return value of `PostgresContentManager.get()`
                 nb = result['content']
-                manager.mark_trusted_cells(nb, path)
+                manager.mark_trusted_cells(nb, result['path'])
 
                 # Check that the checkpoint content matches what's expected
-                key = (result['user_id'], path, result['last_modified'])
+                key = (result['user_id'], result['path'],
+                       result['last_modified'])
                 self.assertEqual(nb, expect_checkpoints_content[key])
 
-                checkpoint_record.add(key)
+                checkpoint_record.append(key)
 
             # Make sure all checkpoints were found
-            self.assertEqual(checkpoint_record, expect_checkpoints)
+            self.assertEqual(sorted(checkpoint_record),
+                             sorted(expect_checkpoints))
 
         # No `min_dt`/`max_dt`
         check_call({}, merge_dicts(beginning_content,
