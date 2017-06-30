@@ -18,7 +18,9 @@ from sqlalchemy.exc import IntegrityError
 from .api_utils import (
     from_api_dirname,
     from_api_filename,
+    reads_base64,
     split_api_filepath,
+    to_api_path,
 )
 from .constants import UNLIMITED
 from .db_utils import (
@@ -547,6 +549,36 @@ def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
     return res
 
 
+def generate_files(engine, crypto_factory, min_dt=None, max_dt=None):
+    """
+    Create a generator of decrypted files.
+
+    This function selects all current notebooks (optionally, falling within a
+    datetime range), decrypts them, and returns a generator yielding dicts,
+    each containing a decoded notebook and metadata including the user,
+    filepath, and timestamp.
+
+    Parameters
+    ----------
+    engine : SQLAlchemy.engine
+        Engine encapsulating database connections.
+    crypto_factory : function[str -> Any]
+        A function from user_id to an object providing the interface required
+        by PostgresContentsManager.crypto.  Results of this will be used for
+        decryption of the selected notebooks.
+    min_dt : datetime.datetime, optional
+        Minimum last modified datetime at which a file will be included.
+    max_dt : datetime.datetime, optional
+        Last modified datetime at and after which a file will be excluded.
+    """
+    where_conds = []
+    if min_dt is not None:
+        where_conds.append(files.c.created_at >= min_dt)
+    if max_dt is not None:
+        where_conds.append(files.c.created_at < max_dt)
+    return _generate_notebooks(files, engine, where_conds, crypto_factory)
+
+
 # =======================================
 # Checkpoints (PostgresCheckpoints)
 # =======================================
@@ -700,6 +732,79 @@ def purge_remote_checkpoints(db, user_id):
     )
 
 
+def generate_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
+    """
+    Create a generator of decrypted remote checkpoints.
+
+    This function selects all notebook checkpoints (optionally, falling within
+    a datetime range), decrypts them, and returns a generator yielding dicts,
+    each containing a decoded notebook and metadata including the user,
+    filepath, and timestamp.
+
+    Parameters
+    ----------
+    engine : SQLAlchemy.engine
+        Engine encapsulating database connections.
+    crypto_factory : function[str -> Any]
+        A function from user_id to an object providing the interface required
+        by PostgresContentsManager.crypto.  Results of this will be used for
+        decryption of the selected notebooks.
+    min_dt : datetime.datetime, optional
+        Minimum last modified datetime at which a file will be included.
+    max_dt : datetime.datetime, optional
+        Last modified datetime at and after which a file will be excluded.
+    """
+    where_conds = []
+    if min_dt is not None:
+        where_conds.append(remote_checkpoints.c.last_modified >= min_dt)
+    if max_dt is not None:
+        where_conds.append(remote_checkpoints.c.last_modified < max_dt)
+    return _generate_notebooks(remote_checkpoints,
+                               engine, where_conds, crypto_factory)
+
+
+# ====================
+# Files or Checkpoints
+# ====================
+def _generate_notebooks(table, engine, where_conds, crypto_factory):
+    """
+    See docstrings for `generate_files` and `generate_checkpoints`.
+    `where_conds` should be a list of SQLAlchemy expressions, which are used as
+    the conditions for WHERE clauses on the SELECT queries to the database.
+    """
+    # Query for notebooks satisfying the conditions.
+    query = select([table]).order_by(table.c.user_id)
+    for cond in where_conds:
+        query = query.where(cond)
+    result = engine.execute(query)
+
+    # Decrypt each notebook and yield the result.
+    last_user_id = None
+    for nb_row in result:
+        # The decrypt function depends on the user, so if the user is the same
+        # then the decrypt function carries over.
+        if nb_row['user_id'] != last_user_id:
+            decrypt_func = crypto_factory(nb_row['user_id']).decrypt
+            last_user_id = nb_row['user_id']
+
+        nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
+        if table is files:
+            # Correct for files schema differing somewhat from checkpoints.
+            nb_dict['path'] = nb_dict['parent_name'] + nb_dict['name']
+            nb_dict['last_modified'] = nb_dict['created_at']
+
+        # For 'content', we use `reads_base64` directly. If the db content
+        # format is changed from base64, the decoding should be changed
+        # here as well.
+        yield {
+            'id': nb_dict['id'],
+            'user_id': nb_dict['user_id'],
+            'path': to_api_path(nb_dict['path']),
+            'last_modified': nb_dict['last_modified'],
+            'content': reads_base64(nb_dict['content']),
+        }
+
+
 ##########################
 # Reencryption Utilities #
 ##########################
@@ -776,7 +881,6 @@ def reencrypt_user_content(engine,
         # file-reencryption process, but we might not see that checkpoint here,
         # which means that we would never update the content of that checkpoint
         # to the new encryption key.
-
         logger.info("Re-encrypting files for %s", user_id)
         for (file_id,) in select_file_ids(db, user_id):
             reencrypt_row_content(
