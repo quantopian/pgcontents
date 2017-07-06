@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import print_function
+
 from getpass import getuser
 from os import getcwd
 import subprocess
@@ -6,15 +8,19 @@ from textwrap import dedent
 
 import click
 
+import nbformat
 from pgcontents.constants import (
     ALEMBIC_DIR_LOCATION,
     DB_URL_ENVVAR,
 )
+from pgcontents.crypto import single_password_crypto_factory
+from pgcontents.pgmanager import PostgresContentsManager
 
 from pgcontents.utils.migrate import (
     temp_alembic_ini,
     upgrade,
 )
+from tornado.web import HTTPError
 
 
 @click.group(context_settings=dict(help_option_names=['-h', '--help']))
@@ -107,6 +113,81 @@ def gen_migration(db_url):
         subprocess.check_call(
             ['alembic', '-c', alembic_ini, 'revision', '--autogenerate']
         )
+
+
+@main.command()
+@click.option(
+    '-u', '--user',
+    help='Owner of the notebook to be fetched.',
+)
+@click.option(
+    '-f', '--filename',
+    help='Name of the file to fetch in the DB.',
+)
+@click.option(
+    '-o', '--output',
+    help="Local filesystem destination.",
+    type=click.Path(
+        file_okay=True,
+        dir_okay=False,
+        writable=True,
+    ),
+)
+@click.option(
+    '-k', '--key',
+    help="Decryption key.",
+    type=click.STRING,
+    envvar='PGCONTENTS_DECRYPTION_KEY',
+)
+@click.option(
+    '-t', '--type',
+    help="Type of file to fetch (notebook or file).",
+    default='notebook',
+    type=click.Choice(['file', 'notebook']),
+    show_default=True,
+)
+@_db_url
+def fetch(db_url, user, filename, key, output, type):
+    """Fetch a notebook from the database to the local filesystem.
+    """
+    if db_url is None:
+        raise click.UsageError("-l/--db-url is required")
+    if user is None:
+        raise click.UsageError("-u/--user is required")
+    if filename is None:
+        raise click.UsageError("-f/--filename is required")
+    if output is None:
+        output = filename
+
+    crypto = single_password_crypto_factory(key)(user)
+
+    mgr = PostgresContentsManager(
+        db_url=db_url,
+        user_id=user,
+        # User should already exist.
+        create_directory_on_startup=False,
+        create_user_on_startup=False,
+        crypto=crypto,
+    )
+
+    try:
+        result = mgr.get(filename, content=True, type=type)
+    except HTTPError as e:
+        if e.status_code == 404:
+            raise click.ClickException("No such file: {!r}".format(filename))
+        elif e.status_code == 500:
+            raise click.ClickException(
+                "Failed to load file: {!r}. Is the decryption key correct?"
+                .format(filename)
+            )
+        else:
+            raise click.ClickException("Unknown error: %s" % e)
+
+    nbformat.write(
+        nbformat.from_dict(result['content']),
+        open(filename, 'w'),
+        version=nbformat.NO_CONVERT,
+    )
 
 
 if __name__ == "__main__":
