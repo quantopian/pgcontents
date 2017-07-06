@@ -194,7 +194,7 @@ def fetch(db_url, user, filename, key, output, type, clear_output):
     if clear_output:
         ClearOutputPreprocessor().preprocess(nb, resources=None)
 
-    nbformat.write(nb, open(filename, 'w'), version=nbformat.NO_CONVERT)
+    nbformat.write(nb, open(output, 'w'), version=nbformat.NO_CONVERT)
 
 
 if __name__ == "__main__":
