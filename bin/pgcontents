@@ -9,6 +9,7 @@ from textwrap import dedent
 import click
 
 import nbformat
+from nbconvert.preprocessors.clearoutput import ClearOutputPreprocessor
 from pgcontents.constants import (
     ALEMBIC_DIR_LOCATION,
     DB_URL_ENVVAR,
@@ -146,8 +147,14 @@ def gen_migration(db_url):
     type=click.Choice(['file', 'notebook']),
     show_default=True,
 )
+@click.option(
+    '--clear-output',
+    help="Clear notebook output before writing?",
+    default=False,
+    is_flag=True,
+)
 @_db_url
-def fetch(db_url, user, filename, key, output, type):
+def fetch(db_url, user, filename, key, output, type, clear_output):
     """Fetch a notebook from the database to the local filesystem.
     """
     if db_url is None:
@@ -183,11 +190,11 @@ def fetch(db_url, user, filename, key, output, type):
         else:
             raise click.ClickException("Unknown error: %s" % e)
 
-    nbformat.write(
-        nbformat.from_dict(result['content']),
-        open(filename, 'w'),
-        version=nbformat.NO_CONVERT,
-    )
+    nb = nbformat.from_dict(result['content'])
+    if clear_output:
+        ClearOutputPreprocessor().preprocess(nb, resources=None)
+
+    nbformat.write(nb, open(filename, 'w'), version=nbformat.NO_CONVERT)
 
 
 if __name__ == "__main__":
