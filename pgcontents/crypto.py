@@ -221,15 +221,18 @@ def single_password_crypto_factory(password):
     The factory here returns a ``FernetEncryption`` that uses a key derived
     from ``password`` and salted with the supplied user_id.
     """
+    @MemoizedCryptoFactory
     def factory(user_id):
         return FernetEncryption(
             Fernet(derive_single_fernet_key(password, user_id))
         )
-    return MemoizedCryptoFactory(factory)
+    return factory
 
 
 class MemoizedCryptoFactory(object):
-
+    """
+    Decorator adding memoization to a crypto_factory.
+    """
     def __init__(self, crypto_factory):
         self._crypto_factory = crypto_factory
         self._cryptos = {}

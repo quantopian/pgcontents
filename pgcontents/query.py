@@ -23,7 +23,6 @@ from .api_utils import (
     to_api_path,
 )
 from .constants import UNLIMITED
-from .crypto import MemoizedCryptoFactory
 from .db_utils import (
     ignore_unique_violation,
     is_unique_violation,
@@ -785,9 +784,6 @@ def _generate_notebooks(table, timestamp_column,
     max_dt : datetime.datetime, optional
         Last modified datetime at and after which a file will be excluded.
     """
-    if not isinstance(crypto_factory, MemoizedCryptoFactory):
-        crypto_factory = MemoizedCryptoFactory(crypto_factory)
-
     where_conds = []
     if min_dt is not None:
         where_conds.append(timestamp_column >= min_dt)
