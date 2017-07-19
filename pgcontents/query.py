@@ -23,6 +23,7 @@ from .api_utils import (
     to_api_path,
 )
 from .constants import UNLIMITED
+from .crypto import MemoizedCryptoFactory
 from .db_utils import (
     ignore_unique_violation,
     is_unique_violation,
@@ -784,6 +785,9 @@ def _generate_notebooks(table, timestamp_column,
     max_dt : datetime.datetime, optional
         Last modified datetime at and after which a file will be excluded.
     """
+    if not isinstance(crypto_factory, MemoizedCryptoFactory):
+        crypto_factory = MemoizedCryptoFactory(crypto_factory)
+
     where_conds = []
     if min_dt is not None:
         where_conds.append(timestamp_column >= min_dt)
@@ -796,17 +800,11 @@ def _generate_notebooks(table, timestamp_column,
         query = query.where(cond)
     result = engine.execute(query)
 
-    decrypt_funcs = {}  # Memoize decrypt functions by user
-
     # Decrypt each notebook and yield the result.
     for nb_row in result:
         # The decrypt function depends on the user
         user_id = nb_row['user_id']
-        try:
-            decrypt_func = decrypt_funcs[user_id]
-        except KeyError:
-            decrypt_func = crypto_factory(user_id).decrypt
-            decrypt_funcs[user_id] = decrypt_func
+        decrypt_func = crypto_factory(user_id).decrypt
 
         nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
         if table is files:

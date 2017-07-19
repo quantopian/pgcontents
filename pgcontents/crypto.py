@@ -225,4 +225,19 @@ def single_password_crypto_factory(password):
         return FernetEncryption(
             Fernet(derive_single_fernet_key(password, user_id))
         )
-    return factory
+    return MemoizedCryptoFactory(factory)
+
+
+class MemoizedCryptoFactory(object):
+
+    def __init__(self, crypto_factory):
+        self._crypto_factory = crypto_factory
+        self._cryptos = {}
+
+    def __call__(self, user_id):
+        try:
+            return self._cryptos[user_id]
+        except KeyError:
+            crypto = self._crypto_factory(user_id)
+            self._cryptos[user_id] = crypto
+            return crypto
