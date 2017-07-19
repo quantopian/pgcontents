@@ -553,6 +553,8 @@ def generate_files(engine, crypto_factory, min_dt=None, max_dt=None):
     """
     Create a generator of decrypted files.
 
+    Files are yielded in ascending order of their timestamp.
+
     This function selects all current notebooks (optionally, falling within a
     datetime range), decrypts them, and returns a generator yielding dicts,
     each containing a decoded notebook and metadata including the user,
@@ -731,6 +733,8 @@ def purge_remote_checkpoints(db, user_id):
 def generate_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
     """
     Create a generator of decrypted remote checkpoints.
+
+    Checkpoints are yielded in ascending order of their timestamp.
 
     This function selects all notebook checkpoints (optionally, falling within
     a datetime range), decrypts them, and returns a generator yielding dicts,
