@@ -199,6 +199,8 @@ class TestGenerateNotebooks(TestCase):
     def populate_users(self, user_ids):
         """
         Create a `PostgresContentsManager` and notebooks for each user.
+
+        Notebooks are returned in a list in order of their creation.
         """
         def encrypted_pgmanager(user_id):
             return PostgresContentsManager(
@@ -209,7 +211,9 @@ class TestGenerateNotebooks(TestCase):
             )
         managers = {user_id: encrypted_pgmanager(user_id)
                     for user_id in user_ids}
-        paths = {user_id: populate(managers[user_id]) for user_id in user_ids}
+        paths = [(user_id, path)
+                 for user_id in user_ids
+                 for path in populate(managers[user_id])]
         return (managers, paths)
 
     def test_generate_files(self):
@@ -221,20 +225,21 @@ class TestGenerateNotebooks(TestCase):
                     'test_generate_files2']
         (managers, paths) = self.populate_users(user_ids)
 
-        def get_file_dt(user_id, idx):
-            path = paths[user_id][idx]
+        def get_file_dt(idx):
+            (user_id, path) = paths[idx]
             return managers[user_id].get(path, content=False)['last_modified']
 
-        # Find a split datetime midway through each user's list of files
-        split_idx = len(paths[user_ids[0]]) // 2
-        split_dts = [get_file_dt(user_id, split_idx) for user_id in user_ids]
+        # Find three split datetimes
+        n = 3
+        split_idxs = [i * (len(paths) // (n + 1)) for i in range(1, n + 1)]
+        split_dts = [get_file_dt(idx) for idx in split_idxs]
 
-        def check_call(kwargs, expect_files_by_user):
+        def check_call(kwargs, expect_files):
             """
             Call `generate_files`; check that all expected files are found,
-            with the correct content.
+            with the correct content, in the correct order.
             """
-            file_record = {user_id: [] for user_id in expect_files_by_user}
+            file_record = []
             for result in generate_files(self.engine, self.crypto_factory,
                                          **kwargs):
                 manager = managers[result['user_id']]
@@ -249,42 +254,20 @@ class TestGenerateNotebooks(TestCase):
                 # matches that returned by `generate_files`
                 self.assertEqual(nb, manager.get(result['path'])['content'])
 
-                file_record[result['user_id']].append(result['path'])
+                file_record.append((result['user_id'], result['path']))
 
-            # Make sure all files were found
-            for user_id in expect_files_by_user:
-                self.assertEqual(sorted(file_record[user_id]),
-                                 sorted(expect_files_by_user[user_id]))
+            # Make sure all files were found in the right order
+            self.assertEqual(file_record, expect_files)
 
         # Expect all files given no `min_dt`/`max_dt`
         check_call({}, paths)
 
-        # `min_dt` is in the middle of 1's files; we get the latter half of 1's
-        # and all of 2's
-        check_call({'min_dt': split_dts[1]},
-                   {
-                       user_ids[0]: [],
-                       user_ids[1]: paths[user_ids[1]][split_idx:],
-                       user_ids[2]: paths[user_ids[2]],
-                   })
+        check_call({'min_dt': split_dts[1]}, paths[split_idxs[1]:])
 
-        # `max_dt` is in the middle of 1's files; we get all of 0's and the
-        # beginning half of 1's
-        check_call({'max_dt': split_dts[1]},
-                   {
-                       user_ids[0]: paths[user_ids[0]],
-                       user_ids[1]: paths[user_ids[1]][:split_idx],
-                       user_ids[2]: [],
-                   })
+        check_call({'max_dt': split_dts[1]}, paths[:split_idxs[1]])
 
-        # `min_dt` is in the middle of 0's files cutting off 0's beginning half
-        # `max_dt` is in the middle of 2's files cutting off 2's latter half
         check_call({'min_dt': split_dts[0], 'max_dt': split_dts[2]},
-                   {
-                       user_ids[0]: paths[user_ids[0]][split_idx:],
-                       user_ids[1]: paths[user_ids[1]],
-                       user_ids[2]: paths[user_ids[2]][:split_idx],
-                   })
+                   paths[split_idxs[0]:split_idxs[2]])
 
     def test_generate_checkpoints(self):
         """
@@ -311,51 +294,44 @@ class TestGenerateNotebooks(TestCase):
             return manager.get(path)['content']
 
         # Each of the next three steps creates a checkpoint for each notebook
-        # and stores the notebook content in a dict, keyed by the user id,
+        # and stores the notebook content in a list, together with the user id,
         # the path, and the datetime of the new checkpoint.
 
         # Begin by making a checkpoint for the original notebook content.
-        beginning_content = {}
-        for user_id in user_ids:
-            for path in paths[user_id]:
-                content = managers[user_id].get(path)['content']
-                dt = managers[user_id].create_checkpoint(path)['last_modified']
-                beginning_content[user_id, path, dt] = content
+        beginning_checkpoints = []
+        for user_id, path in paths:
+            content = managers[user_id].get(path)['content']
+            dt = managers[user_id].create_checkpoint(path)['last_modified']
+            beginning_checkpoints.append((user_id, path, dt, content))
 
         # Update each notebook and make a new checkpoint.
-        middle_content = {}
+        middle_checkpoints = []
         middle_min_dt = None
-        for user_id in user_ids:
-            for path in paths[user_id]:
-                content = update_content(user_id, path, '1st addition')
-                dt = managers[user_id].create_checkpoint(path)['last_modified']
-                middle_content[user_id, path, dt] = content
-                if middle_min_dt is None:
-                    middle_min_dt = dt
+        for user_id, path in paths:
+            content = update_content(user_id, path, '1st addition')
+            dt = managers[user_id].create_checkpoint(path)['last_modified']
+            middle_checkpoints.append((user_id, path, dt, content))
+            if middle_min_dt is None:
+                middle_min_dt = dt
 
         # Update each notebook again and make another checkpoint.
-        end_content = {}
+        end_checkpoints = []
         end_min_dt = None
-        for user_id in user_ids:
-            for path in paths[user_id]:
-                content = update_content(user_id, path, '2nd addition')
-                dt = managers[user_id].create_checkpoint(path)['last_modified']
-                end_content[user_id, path, dt] = content
-                if end_min_dt is None:
-                    end_min_dt = dt
+        for user_id, path in paths:
+            content = update_content(user_id, path, '2nd addition')
+            dt = managers[user_id].create_checkpoint(path)['last_modified']
+            end_checkpoints.append((user_id, path, dt, content))
+            if end_min_dt is None:
+                end_min_dt = dt
 
-        def merge_dicts(*args):
-            result = {}
-            for d in args:
-                result.update(d)
-            return result
+        def concat_all(lists):
+            return sum(lists, [])
 
-        def check_call(kwargs, expect_checkpoints_content):
+        def check_call(kwargs, expect_checkpoints):
             """
             Call `generate_checkpoints`; check that all expected checkpoints
-            are found, with the correct content.
+            are found, with the correct content, in the correct order.
             """
-            expect_checkpoints = expect_checkpoints_content.keys()
             checkpoint_record = []
             for result in generate_checkpoints(self.engine,
                                                self.crypto_factory, **kwargs):
@@ -367,29 +343,24 @@ class TestGenerateNotebooks(TestCase):
                 nb = result['content']
                 manager.mark_trusted_cells(nb, result['path'])
 
-                # Check that the checkpoint content matches what's expected
-                key = (result['user_id'], result['path'],
-                       result['last_modified'])
-                self.assertEqual(nb, expect_checkpoints_content[key])
+                checkpoint_record.append((result['user_id'], result['path'],
+                                          result['last_modified'], nb))
 
-                checkpoint_record.append(key)
-
-            # Make sure all checkpoints were found
-            self.assertEqual(sorted(checkpoint_record),
-                             sorted(expect_checkpoints))
+            # Make sure all checkpoints were found in the right order
+            self.assertEqual(checkpoint_record, expect_checkpoints)
 
         # No `min_dt`/`max_dt`
-        check_call({}, merge_dicts(beginning_content,
-                                   middle_content, end_content))
+        check_call({}, concat_all([beginning_checkpoints, middle_checkpoints,
+                                   end_checkpoints]))
 
-        # `min_dt` cuts off `beginning_content` checkpoints
+        # `min_dt` cuts off `beginning_checkpoints` checkpoints
         check_call({'min_dt': middle_min_dt},
-                   merge_dicts(middle_content, end_content))
+                   concat_all([middle_checkpoints, end_checkpoints]))
 
-        # `max_dt` cuts off `end_content` checkpoints
+        # `max_dt` cuts off `end_checkpoints` checkpoints
         check_call({'max_dt': end_min_dt},
-                   merge_dicts(beginning_content, middle_content))
+                   concat_all([beginning_checkpoints, middle_checkpoints]))
 
-        # `min_dt` and `max_dt` together isolate `middle_content`
+        # `min_dt` and `max_dt` together isolate `middle_checkpoints`
         check_call({'min_dt': middle_min_dt, 'max_dt': end_min_dt},
-                   middle_content)
+                   middle_checkpoints)

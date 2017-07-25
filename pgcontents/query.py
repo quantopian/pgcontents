@@ -553,6 +553,8 @@ def generate_files(engine, crypto_factory, min_dt=None, max_dt=None):
     """
     Create a generator of decrypted files.
 
+    Files are yielded in ascending order of their timestamp.
+
     This function selects all current notebooks (optionally, falling within a
     datetime range), decrypts them, and returns a generator yielding dicts,
     each containing a decoded notebook and metadata including the user,
@@ -571,12 +573,8 @@ def generate_files(engine, crypto_factory, min_dt=None, max_dt=None):
     max_dt : datetime.datetime, optional
         Last modified datetime at and after which a file will be excluded.
     """
-    where_conds = []
-    if min_dt is not None:
-        where_conds.append(files.c.created_at >= min_dt)
-    if max_dt is not None:
-        where_conds.append(files.c.created_at < max_dt)
-    return _generate_notebooks(files, engine, where_conds, crypto_factory)
+    return _generate_notebooks(files, files.c.created_at,
+                               engine, crypto_factory, min_dt, max_dt)
 
 
 # =======================================
@@ -736,6 +734,8 @@ def generate_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
     """
     Create a generator of decrypted remote checkpoints.
 
+    Checkpoints are yielded in ascending order of their timestamp.
+
     This function selects all notebook checkpoints (optionally, falling within
     a datetime range), decrypts them, and returns a generator yielding dicts,
     each containing a decoded notebook and metadata including the user,
@@ -754,38 +754,53 @@ def generate_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
     max_dt : datetime.datetime, optional
         Last modified datetime at and after which a file will be excluded.
     """
-    where_conds = []
-    if min_dt is not None:
-        where_conds.append(remote_checkpoints.c.last_modified >= min_dt)
-    if max_dt is not None:
-        where_conds.append(remote_checkpoints.c.last_modified < max_dt)
     return _generate_notebooks(remote_checkpoints,
-                               engine, where_conds, crypto_factory)
+                               remote_checkpoints.c.last_modified,
+                               engine, crypto_factory, min_dt, max_dt)
 
 
 # ====================
 # Files or Checkpoints
 # ====================
-def _generate_notebooks(table, engine, where_conds, crypto_factory):
+def _generate_notebooks(table, timestamp_column,
+                        engine, crypto_factory, min_dt, max_dt):
     """
     See docstrings for `generate_files` and `generate_checkpoints`.
-    `where_conds` should be a list of SQLAlchemy expressions, which are used as
-    the conditions for WHERE clauses on the SELECT queries to the database.
+
+    Parameters
+    ----------
+    table : SQLAlchemy.Table
+        Table to fetch notebooks from, `files` or `remote_checkpoints.
+    timestamp_column : SQLAlchemy.Column
+        `table`'s column storing timestamps, `created_at` or `last_modified`.
+    engine : SQLAlchemy.engine
+        Engine encapsulating database connections.
+    crypto_factory : function[str -> Any]
+        A function from user_id to an object providing the interface required
+        by PostgresContentsManager.crypto.  Results of this will be used for
+        decryption of the selected notebooks.
+    min_dt : datetime.datetime, optional
+        Minimum last modified datetime at which a file will be included.
+    max_dt : datetime.datetime, optional
+        Last modified datetime at and after which a file will be excluded.
     """
+    where_conds = []
+    if min_dt is not None:
+        where_conds.append(timestamp_column >= min_dt)
+    if max_dt is not None:
+        where_conds.append(timestamp_column < max_dt)
+
     # Query for notebooks satisfying the conditions.
-    query = select([table]).order_by(table.c.user_id)
+    query = select([table]).order_by(timestamp_column)
     for cond in where_conds:
         query = query.where(cond)
     result = engine.execute(query)
 
     # Decrypt each notebook and yield the result.
-    last_user_id = None
     for nb_row in result:
-        # The decrypt function depends on the user, so if the user is the same
-        # then the decrypt function carries over.
-        if nb_row['user_id'] != last_user_id:
-            decrypt_func = crypto_factory(nb_row['user_id']).decrypt
-            last_user_id = nb_row['user_id']
+        # The decrypt function depends on the user
+        user_id = nb_row['user_id']
+        decrypt_func = crypto_factory(user_id).decrypt
 
         nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
         if table is files:
@@ -798,7 +813,7 @@ def _generate_notebooks(table, engine, where_conds, crypto_factory):
         # here as well.
         yield {
             'id': nb_dict['id'],
-            'user_id': nb_dict['user_id'],
+            'user_id': user_id,
             'path': to_api_path(nb_dict['path']),
             'last_modified': nb_dict['last_modified'],
             'content': reads_base64(nb_dict['content']),
