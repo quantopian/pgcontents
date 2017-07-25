@@ -230,7 +230,8 @@ class TestGenerateNotebooks(TestCase):
             return managers[user_id].get(path, content=False)['last_modified']
 
         # Find three split datetimes
-        split_idxs = [i * (len(paths) // 4) for i in range(1, 4)]
+        n = 3
+        split_idxs = [i * (len(paths) // (n + 1)) for i in range(1, n + 1)]
         split_dts = [get_file_dt(idx) for idx in split_idxs]
 
         def check_call(kwargs, expect_files):
@@ -323,6 +324,9 @@ class TestGenerateNotebooks(TestCase):
             if end_min_dt is None:
                 end_min_dt = dt
 
+        def concat_all(lists):
+            return sum(lists, [])
+
         def check_call(kwargs, expect_checkpoints):
             """
             Call `generate_checkpoints`; check that all expected checkpoints
@@ -346,16 +350,16 @@ class TestGenerateNotebooks(TestCase):
             self.assertEqual(checkpoint_record, expect_checkpoints)
 
         # No `min_dt`/`max_dt`
-        check_call({}, sum([beginning_checkpoints, middle_checkpoints,
-                            end_checkpoints], []))
+        check_call({}, concat_all([beginning_checkpoints, middle_checkpoints,
+                                   end_checkpoints]))
 
         # `min_dt` cuts off `beginning_checkpoints` checkpoints
         check_call({'min_dt': middle_min_dt},
-                   sum([middle_checkpoints, end_checkpoints], []))
+                   concat_all([middle_checkpoints, end_checkpoints]))
 
         # `max_dt` cuts off `end_checkpoints` checkpoints
         check_call({'max_dt': end_min_dt},
-                   sum([beginning_checkpoints, middle_checkpoints], []))
+                   concat_all([beginning_checkpoints, middle_checkpoints]))
 
         # `min_dt` and `max_dt` together isolate `middle_checkpoints`
         check_call({'min_dt': middle_min_dt, 'max_dt': end_min_dt},

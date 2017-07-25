@@ -9,7 +9,7 @@ from ..crypto import (
     derive_fallback_fernet_keys,
     FallbackCrypto,
     FernetEncryption,
-    MemoizedCryptoFactory,
+    memoize_single_arg,
     NoEncryption,
     single_password_crypto_factory,
 )
@@ -63,10 +63,10 @@ class TestEncryption(TestCase):
         # Unencrypted data should be returned unchanged.
         self.assertEqual(multi_fernet_crypto.decrypt(data), data)
 
-    def test_memoized_crypto_factory(self):
+    def test_memoize_single_arg(self):
         full_calls = []
 
-        @MemoizedCryptoFactory
+        @memoize_single_arg
         def mock_factory(user_id):
             full_calls.append(user_id)
             return u'crypto' + user_id

@@ -7,6 +7,7 @@ encounter an input that they cannot decrypt.
 """
 import sys
 import base64
+from functools import wraps
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
@@ -221,7 +222,7 @@ def single_password_crypto_factory(password):
     The factory here returns a ``FernetEncryption`` that uses a key derived
     from ``password`` and salted with the supplied user_id.
     """
-    @MemoizedCryptoFactory
+    @memoize_single_arg
     def factory(user_id):
         return FernetEncryption(
             Fernet(derive_single_fernet_key(password, user_id))
@@ -229,18 +230,17 @@ def single_password_crypto_factory(password):
     return factory
 
 
-class MemoizedCryptoFactory(object):
+def memoize_single_arg(f):
     """
-    Decorator adding memoization to a crypto_factory.
+    Decorator memoizing a single-argument function
     """
-    def __init__(self, crypto_factory):
-        self._crypto_factory = crypto_factory
-        self._cryptos = {}
+    memo = {}
 
-    def __call__(self, user_id):
+    @wraps(f)
+    def memoized_f(arg):
         try:
-            return self._cryptos[user_id]
+            return memo[arg]
         except KeyError:
-            crypto = self._crypto_factory(user_id)
-            self._cryptos[user_id] = crypto
-            return crypto
+            result = memo[arg] = f(arg)
+            return result
+    return memoized_f
