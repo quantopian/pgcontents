@@ -214,6 +214,13 @@ class TestGenerateNotebooks(TestCase):
         paths = [(user_id, path)
                  for user_id in user_ids
                  for path in populate(managers[user_id])]
+
+        # Create a text file for each user as well, which should be ignored by
+        # the notebook generators
+        model = {'content': 'text file contents', 'format': 'text'}
+        for manager in managers.values():
+            manager.new(model, path='text file.txt')
+
         return (managers, paths)
 
     def test_generate_files(self):

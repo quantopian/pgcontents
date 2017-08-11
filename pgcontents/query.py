@@ -795,6 +795,9 @@ def _generate_notebooks(table, timestamp_column,
         where_conds.append(timestamp_column >= min_dt)
     if max_dt is not None:
         where_conds.append(timestamp_column < max_dt)
+    if table is files:
+        # Only select files that are notebooks
+        where_conds.append(files.c.name.like(u'%.ipynb'))
 
     # Query for notebooks satisfying the conditions.
     query = select([table]).order_by(timestamp_column)
@@ -826,11 +829,12 @@ def _generate_notebooks(table, timestamp_column,
                 'content': reads_base64(nb_dict['content']),
             }
         except CorruptedFile:
-            logger.warning(
-                'Corrupted file with id {} in table {}.',
-                nb_row['id'],
-                table.name,
-            )
+            if logger is not None:
+                logger.warning(
+                    'Corrupted file with id {} in table {}.',
+                    nb_row['id'],
+                    table.name,
+                )
 
 
 ##########################
