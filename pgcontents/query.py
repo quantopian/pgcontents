@@ -831,9 +831,8 @@ def _generate_notebooks(table, timestamp_column,
         except CorruptedFile:
             if logger is not None:
                 logger.warning(
-                    'Corrupted file with id {} in table {}.',
-                    nb_row['id'],
-                    table.name,
+                    'Corrupted file with id %d in table %s.'
+                    % (nb_row['id'], table.name)
                 )
 
 
