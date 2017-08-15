@@ -294,7 +294,7 @@ class TestGenerateNotebooks(TestCase):
                     file_record.append((result['user_id'], result['path']))
 
                 if expect_warning:
-                    mock_warn.assert_called_with(
+                    mock_warn.assert_called_once_with(
                         'Corrupted file with id %d in table files.'
                         % bad_notebook_id
                     )
