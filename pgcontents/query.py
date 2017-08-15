@@ -31,6 +31,7 @@ from .db_utils import (
     to_dict_with_content,
 )
 from .error import (
+    CorruptedFile,
     DirectoryNotEmpty,
     FileExists,
     DirectoryExists,
@@ -549,7 +550,8 @@ def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
     return res
 
 
-def generate_files(engine, crypto_factory, min_dt=None, max_dt=None):
+def generate_files(engine, crypto_factory, min_dt=None, max_dt=None,
+                   logger=None):
     """
     Create a generator of decrypted files.
 
@@ -572,9 +574,10 @@ def generate_files(engine, crypto_factory, min_dt=None, max_dt=None):
         Minimum last modified datetime at which a file will be included.
     max_dt : datetime.datetime, optional
         Last modified datetime at and after which a file will be excluded.
+    logger : Logger, optional
     """
     return _generate_notebooks(files, files.c.created_at,
-                               engine, crypto_factory, min_dt, max_dt)
+                               engine, crypto_factory, min_dt, max_dt, logger)
 
 
 # =======================================
@@ -730,7 +733,8 @@ def purge_remote_checkpoints(db, user_id):
     )
 
 
-def generate_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
+def generate_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None,
+                         logger=None):
     """
     Create a generator of decrypted remote checkpoints.
 
@@ -753,17 +757,18 @@ def generate_checkpoints(engine, crypto_factory, min_dt=None, max_dt=None):
         Minimum last modified datetime at which a file will be included.
     max_dt : datetime.datetime, optional
         Last modified datetime at and after which a file will be excluded.
+    logger : Logger, optional
     """
     return _generate_notebooks(remote_checkpoints,
                                remote_checkpoints.c.last_modified,
-                               engine, crypto_factory, min_dt, max_dt)
+                               engine, crypto_factory, min_dt, max_dt, logger)
 
 
 # ====================
 # Files or Checkpoints
 # ====================
 def _generate_notebooks(table, timestamp_column,
-                        engine, crypto_factory, min_dt, max_dt):
+                        engine, crypto_factory, min_dt, max_dt, logger):
     """
     See docstrings for `generate_files` and `generate_checkpoints`.
 
@@ -779,16 +784,20 @@ def _generate_notebooks(table, timestamp_column,
         A function from user_id to an object providing the interface required
         by PostgresContentsManager.crypto.  Results of this will be used for
         decryption of the selected notebooks.
-    min_dt : datetime.datetime, optional
+    min_dt : datetime.datetime
         Minimum last modified datetime at which a file will be included.
-    max_dt : datetime.datetime, optional
+    max_dt : datetime.datetime
         Last modified datetime at and after which a file will be excluded.
+    logger : Logger
     """
     where_conds = []
     if min_dt is not None:
         where_conds.append(timestamp_column >= min_dt)
     if max_dt is not None:
         where_conds.append(timestamp_column < max_dt)
+    if table is files:
+        # Only select files that are notebooks
+        where_conds.append(files.c.name.like(u'%.ipynb'))
 
     # Query for notebooks satisfying the conditions.
     query = select([table]).order_by(timestamp_column)
@@ -798,26 +807,33 @@ def _generate_notebooks(table, timestamp_column,
 
     # Decrypt each notebook and yield the result.
     for nb_row in result:
-        # The decrypt function depends on the user
-        user_id = nb_row['user_id']
-        decrypt_func = crypto_factory(user_id).decrypt
+        try:
+            # The decrypt function depends on the user
+            user_id = nb_row['user_id']
+            decrypt_func = crypto_factory(user_id).decrypt
 
-        nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
-        if table is files:
-            # Correct for files schema differing somewhat from checkpoints.
-            nb_dict['path'] = nb_dict['parent_name'] + nb_dict['name']
-            nb_dict['last_modified'] = nb_dict['created_at']
+            nb_dict = to_dict_with_content(table.c, nb_row, decrypt_func)
+            if table is files:
+                # Correct for files schema differing somewhat from checkpoints.
+                nb_dict['path'] = nb_dict['parent_name'] + nb_dict['name']
+                nb_dict['last_modified'] = nb_dict['created_at']
 
-        # For 'content', we use `reads_base64` directly. If the db content
-        # format is changed from base64, the decoding should be changed
-        # here as well.
-        yield {
-            'id': nb_dict['id'],
-            'user_id': user_id,
-            'path': to_api_path(nb_dict['path']),
-            'last_modified': nb_dict['last_modified'],
-            'content': reads_base64(nb_dict['content']),
-        }
+            # For 'content', we use `reads_base64` directly. If the db content
+            # format is changed from base64, the decoding should be changed
+            # here as well.
+            yield {
+                'id': nb_dict['id'],
+                'user_id': user_id,
+                'path': to_api_path(nb_dict['path']),
+                'last_modified': nb_dict['last_modified'],
+                'content': reads_base64(nb_dict['content']),
+            }
+        except CorruptedFile:
+            if logger is not None:
+                logger.warning(
+                    'Corrupted file with id %d in table %s.'
+                    % (nb_row['id'], table.name)
+                )
 
 
 ##########################

@@ -30,6 +30,11 @@ from ..utils.sync import (
     unencrypt_all_users,
 )
 
+try:
+    import mock
+except ImportError:
+    from unittest import mock
+
 
 class TestReEncryption(TestCase):
 
@@ -214,7 +219,30 @@ class TestGenerateNotebooks(TestCase):
         paths = [(user_id, path)
                  for user_id in user_ids
                  for path in populate(managers[user_id])]
+
+        # Create a text file for each user as well, which should be ignored by
+        # the notebook generators
+        model = {'content': 'text file contents', 'format': 'text'}
+        for manager in managers.values():
+            manager.new(model, path='text file.txt')
+
         return (managers, paths)
+
+    def save_bad_notebook(self, manager):
+        """
+        Save a notebook with non-notebook content. Trying to parse it should
+        cause `CorruptedFile` to be raised.
+
+        Returns the file id of the saved notebook.
+        """
+        model = {
+            'type': 'file',
+            'content': 'bad notebook contents',
+            'format': 'text',
+        }
+        path = 'bad notebook.ipynb'
+        manager.new(model, path=path)
+        return manager.get_file_id(path)
 
     def test_generate_files(self):
         """
@@ -225,6 +253,10 @@ class TestGenerateNotebooks(TestCase):
                     'test_generate_files2']
         (managers, paths) = self.populate_users(user_ids)
 
+        # Since the bad notebook is saved last, it will be hit only when no
+        # max_dt is specified.
+        bad_notebook_id = self.save_bad_notebook(managers[user_ids[0]])
+
         def get_file_dt(idx):
             (user_id, path) = paths[idx]
             return managers[user_id].get(path, content=False)['last_modified']
@@ -234,40 +266,69 @@ class TestGenerateNotebooks(TestCase):
         split_idxs = [i * (len(paths) // (n + 1)) for i in range(1, n + 1)]
         split_dts = [get_file_dt(idx) for idx in split_idxs]
 
-        def check_call(kwargs, expect_files):
+        def check_call(kwargs, expect_files, expect_warning=False):
             """
             Call `generate_files`; check that all expected files are found,
             with the correct content, in the correct order.
             """
             file_record = []
-            for result in generate_files(self.engine, self.crypto_factory,
-                                         **kwargs):
-                manager = managers[result['user_id']]
+            logger = Logger('Generate Files Testing')
+            with mock.patch.object(logger, 'warning') as mock_warn:
+                for result in generate_files(self.engine, self.crypto_factory,
+                                             logger=logger, **kwargs):
+                    manager = managers[result['user_id']]
 
-                # This recreates functionality from
-                # `manager._notebook_model_from_db` to match with the model
-                # returned by `manager.get`.
-                nb = result['content']
-                manager.mark_trusted_cells(nb, result['path'])
+                    # This recreates functionality from
+                    # `manager._notebook_model_from_db` to match with the model
+                    # returned by `manager.get`.
+                    nb = result['content']
+                    manager.mark_trusted_cells(nb, result['path'])
 
-                # Check that the content returned by the pgcontents manager
-                # matches that returned by `generate_files`
-                self.assertEqual(nb, manager.get(result['path'])['content'])
+                    # Check that the content returned by the pgcontents manager
+                    # matches that returned by `generate_files`
+                    self.assertEqual(
+                        nb,
+                        manager.get(result['path'])['content']
+                    )
 
-                file_record.append((result['user_id'], result['path']))
+                    file_record.append((result['user_id'], result['path']))
+
+                if expect_warning:
+                    mock_warn.assert_called_once_with(
+                        'Corrupted file with id %d in table files.'
+                        % bad_notebook_id
+                    )
+                    mock_warn.reset_mock()
+                else:
+                    mock_warn.assert_not_called()
 
             # Make sure all files were found in the right order
             self.assertEqual(file_record, expect_files)
 
         # Expect all files given no `min_dt`/`max_dt`
-        check_call({}, paths)
+        check_call(
+            {},
+            paths,
+            expect_warning=True,
+        )
 
-        check_call({'min_dt': split_dts[1]}, paths[split_idxs[1]:])
+        check_call(
+            {'min_dt': split_dts[1]},
+            paths[split_idxs[1]:],
+            expect_warning=True,
+        )
 
-        check_call({'max_dt': split_dts[1]}, paths[:split_idxs[1]])
+        check_call(
+            {'max_dt': split_dts[1]},
+            paths[:split_idxs[1]],
+            expect_warning=False,
+        )
 
-        check_call({'min_dt': split_dts[0], 'max_dt': split_dts[2]},
-                   paths[split_idxs[0]:split_idxs[2]])
+        check_call(
+            {'min_dt': split_dts[0], 'max_dt': split_dts[2]},
+            paths[split_idxs[0]:split_idxs[2]],
+            expect_warning=False,
+        )
 
     def test_generate_checkpoints(self):
         """
