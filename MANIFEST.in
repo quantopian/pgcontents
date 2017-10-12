@@ -1,5 +1,7 @@
 include README.rst
 include pgcontents/alembic.ini.template
+include pgcontents/alembic/script.py.mako
+include pgcontents/alembic/versions/*
 include LICENSE
 include requirements*.txt
 
