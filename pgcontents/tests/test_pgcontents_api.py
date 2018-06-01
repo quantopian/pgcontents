@@ -21,6 +21,7 @@ from base64 import (
     b64encode,
 )
 from dateutil.parser import parse
+from notebook.tests.launchnotebook import assert_http_error
 from six import iteritems
 
 from IPython.utils.tempdir import TemporaryDirectory
@@ -290,6 +291,12 @@ class PostgresContentsAPITest(_APITestBase):
         self.assertIsInstance(self.pg_manager.crypto, NoEncryption)
         self.assertIsInstance(self.pg_manager.checkpoints.crypto, NoEncryption)
 
+    # Change behaviour in 5.5
+    def test_delete_non_empty_dir(self):
+        # Test that non empty directory can be deleted
+        with assert_http_error(400):
+            self.api.delete(u'å b')
+
 
 class EncryptedPostgresContentsAPITest(PostgresContentsAPITest):
     config = postgres_contents_config()
@@ -366,6 +373,9 @@ class PostgresCheckpointsAPITest(_APITestBase):
     def test_checkpoints_separate_root(self):
         pass
 
+    def test_delete_non_empty_dir(self):
+        self.api.delete(u'å b')
+
 
 class EncryptedPostgresCheckpointsAPITest(PostgresCheckpointsAPITest):
     config = postgres_checkpoints_config()
@@ -373,6 +383,8 @@ class EncryptedPostgresCheckpointsAPITest(PostgresCheckpointsAPITest):
 
     def test_crypto_types(self):
         self.assertIsInstance(self.checkpoints.crypto, FernetEncryption)
+
+    test_delete_non_empty_dir = _APITestBase.test_delete_non_empty_dir
 
 
 class HybridContentsPGRootAPITest(PostgresContentsAPITest):
@@ -484,6 +496,10 @@ class EncryptedHybridContentsAPITest(HybridContentsPGRootAPITest):
             self.pg_manager.checkpoints.crypto,
             FernetEncryption,
         )
+
+    # This is weeird in any case
+    def test_delete_non_empty_dir(self):
+        pass
 
 
 # This needs to be removed or else we'll run the main IPython tests as well.

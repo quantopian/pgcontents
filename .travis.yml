@@ -1,11 +1,20 @@
 language: python
 sudo: false
-python:
-  - "2.7"
-  - "3.4"
-env:
-  - IPYTHON=3
-  - IPYTHON=4
+
+matrix:
+  include:
+    - python: 2.7
+      env: IPYTHON=3
+    - python: 2.7
+      env: IPYTHON=4
+
+    - python: 3.4
+      env: IPYTHON=3
+    - python: 3.4
+      env: IPYTHON=4
+
+    - python: 3.6
+      env: IPYTHON=6
 
 addons:
   postgresql: "9.3"
@@ -16,6 +25,7 @@ install:
 script:
   - if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-ipython$IPYTHON,flake8; fi
   - if [[ $TRAVIS_PYTHON_VERSION = '3.4' ]]; then tox -e py34-ipython$IPYTHON,flake8; fi
+  - if [[ $TRAVIS_PYTHON_VERSION = '3.6' ]]; then tox -e py36-ipython$IPYTHON; fi
 
 branches:
   only:
