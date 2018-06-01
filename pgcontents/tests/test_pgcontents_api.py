@@ -163,6 +163,17 @@ class _APITestBase(APITest):
             )
         )
 
+    # skip this test since it is satisfyable across all supported notebook versions
+    def test_delete_non_empty_dir(self):
+        # ContentsManager has different behaviour in notebook 5.5+
+        # https://github.com/jupyter/notebook/pull/3108
+
+        # Old behaviour
+        # from notebook.tests.launchnotebook import assert_http_error
+        # with assert_http_error(400):
+        #    self.api.delete(u'å b')
+        pass
+
 
 def postgres_contents_config():
     """
@@ -290,14 +301,6 @@ class PostgresContentsAPITest(_APITestBase):
         self.assertIsInstance(self.pg_manager.crypto, NoEncryption)
         self.assertIsInstance(self.pg_manager.checkpoints.crypto, NoEncryption)
 
-    # Changes behaviour in 5.5
-    def test_delete_non_empty_dir(self):
-        # Test that non empty directory can be deleted
-        pass
-        # from notebook.tests.launchnotebook import assert_http_error
-        # with assert_http_error(400):
-        #    self.api.delete(u'å b')
-
 
 class EncryptedPostgresContentsAPITest(PostgresContentsAPITest):
     config = postgres_contents_config()
@@ -374,9 +377,6 @@ class PostgresCheckpointsAPITest(_APITestBase):
     def test_checkpoints_separate_root(self):
         pass
 
-    def test_delete_non_empty_dir(self):
-        self.api.delete(u'å b')
-
 
 class EncryptedPostgresCheckpointsAPITest(PostgresCheckpointsAPITest):
     config = postgres_checkpoints_config()
@@ -384,8 +384,6 @@ class EncryptedPostgresCheckpointsAPITest(PostgresCheckpointsAPITest):
 
     def test_crypto_types(self):
         self.assertIsInstance(self.checkpoints.crypto, FernetEncryption)
-
-    test_delete_non_empty_dir = _APITestBase.test_delete_non_empty_dir
 
 
 class HybridContentsPGRootAPITest(PostgresContentsAPITest):
@@ -497,10 +495,6 @@ class EncryptedHybridContentsAPITest(HybridContentsPGRootAPITest):
             self.pg_manager.checkpoints.crypto,
             FernetEncryption,
         )
-
-    # This is weeird in any case
-    def test_delete_non_empty_dir(self):
-        pass
 
 
 # This needs to be removed or else we'll run the main IPython tests as well.
