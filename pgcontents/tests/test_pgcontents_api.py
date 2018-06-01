@@ -453,12 +453,12 @@ class HybridContentsPGRootAPITest(PostgresContentsAPITest):
         'isfile',
         'isdir',
     ]
-    l = locals()
+    locs = locals()
     for method_name in __methods_to_multiplex:
-        l[method_name] = __api_path_dispatch(method_name)
+        locs[method_name] = __api_path_dispatch(method_name)
     del __methods_to_multiplex
     del __api_path_dispatch
-    del l
+    del locs
 
     # Override to not delete the root of the file subsystem.
     def test_delete_dirs(self):
