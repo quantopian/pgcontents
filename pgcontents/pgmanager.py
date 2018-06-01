@@ -73,9 +73,9 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         return PostgresCheckpoints
 
     def _checkpoints_kwargs_default(self):
-        #_checkpoints_kwargs_default
         try:
-            kw = super(PostgresContentsManager, self)._checkpoints_kwargs_default()
+            kw = (super(PostgresContentsManager, self).
+                _checkpoints_kwargs_default())
         except AttributeError:
             kw = {}
         kw.update({
