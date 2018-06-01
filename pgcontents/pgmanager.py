@@ -73,7 +73,11 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         return PostgresCheckpoints
 
     def _checkpoints_kwargs_default(self):
-        kw = super(PostgresContentsManager, self)._checkpoints_kwargs_default()
+        try:
+            klass = PostgresContentsManager
+            kw = super(klass, self)._checkpoints_kwargs_default()
+        except AttributeError:
+            kw = {}
         kw.update({
             'create_user_on_startup': self.create_user_on_startup,
             'crypto': self.crypto,
