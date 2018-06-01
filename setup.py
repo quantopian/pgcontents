@@ -49,6 +49,7 @@ def main():
             'test': test_reqs,
             'ipy3': ['ipython[test,notebook]<4.0'],
             'ipy4': ['ipython<6.0', 'notebook[test]>=4.0,<5.0'],
+            'ipy6': ['ipython>6.0', 'notebook[test]>=5.0']
         },
         scripts=[
             'bin/pgcontents',
