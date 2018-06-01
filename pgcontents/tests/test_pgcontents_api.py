@@ -163,7 +163,7 @@ class _APITestBase(APITest):
             )
         )
 
-    # skip this test since it is satisfyable across all supported notebook versions
+    # skip test as it is not satisfyable across supported notebook versions
     def test_delete_non_empty_dir(self):
         # ContentsManager has different behaviour in notebook 5.5+
         # https://github.com/jupyter/notebook/pull/3108
