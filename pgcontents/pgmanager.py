@@ -77,7 +77,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             klass = PostgresContentsManager
             kw = super(klass, self)._checkpoints_kwargs_default()
         except AttributeError:
-            kw = {}
+            kw = {'parent': self, 'log': self.log}
         kw.update({
             'create_user_on_startup': self.create_user_on_startup,
             'crypto': self.crypto,
