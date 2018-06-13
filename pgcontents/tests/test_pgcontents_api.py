@@ -51,7 +51,7 @@ from .utils import (
 )
 from ..utils.ipycompat import (
     APITest, Config, FileContentsManager, GenericFileCheckpoints, to_os_path,
-)
+    IPY3)
 from ..utils.sync import walk, walk_dirs
 
 
@@ -170,9 +170,30 @@ class _APITestBase(APITest):
 
         # Old behaviour
         # from notebook.tests.launchnotebook import assert_http_error
-        # with assert_http_error(400):
-        #    self.api.delete(u'å b')
-        pass
+
+        if isinstance(self.notebook.contents_manager, PostgresContentsManager):
+            _test_delete_non_empty_dir_fail(self)
+        else:
+            _test_delete_non_empty_dir_pass(self)
+
+
+def _test_delete_non_empty_dir_fail(self):
+    if IPY3:
+        return
+    from notebook.tests.launchnotebook import assert_http_error
+    with assert_http_error(400):
+        self.api.delete(u'å b')
+
+
+def _test_delete_non_empty_dir_pass(self):
+    if IPY3:
+        return
+    from notebook.tests.launchnotebook import assert_http_error
+    # Test that non empty directory can be deleted
+    self.api.delete(u'å b')
+    # Check if directory has actually been deleted
+    with assert_http_error(404):
+        self.api.list(u'å b')
 
 
 def postgres_contents_config():
