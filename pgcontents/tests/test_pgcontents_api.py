@@ -165,11 +165,11 @@ class _APITestBase(APITest):
 
     # ContentsManager has different behaviour in notebook 5.5+
     # https://github.com/jupyter/notebook/pull/3108...it now allows
-    # non empty directories to be deleted.
+    # non-empty directories to be deleted.
     #
     # PostgresContentsManager should continue to work the old way and
     # prevent non-empty directories from being deleted, since it doesn't
-    # support backing up the delted directory in the OS trash can.
+    # support backing up the deleted directory in the OS trash can.
     # FileContentsManager should allow non-empty directories to be deleted.
     def test_delete_non_empty_dir(self):
         if issubclass(self.notebook.contents_manager_class,
@@ -179,7 +179,7 @@ class _APITestBase(APITest):
             _test_delete_non_empty_dir_fail(self, u'å b')
         elif issubclass(self.notebook.contents_manager_class,
                         HybridContentsManager):
-            # check that one of the non empty subdirectories owned by the
+            # check that one of the non-empty subdirectories owned by the
             # PostgresContentsManager cannnot be deleted
             _test_delete_non_empty_dir_fail(self, 'Directory with spaces in')
         else:

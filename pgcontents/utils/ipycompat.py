@@ -90,7 +90,7 @@ else:
 __all__ = [
     'APITest',
     'Any',
-    'assert_http_error'
+    'assert_http_error',
     'Bool',
     'Checkpoints',
     'Config',
