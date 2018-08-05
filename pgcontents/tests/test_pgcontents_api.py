@@ -51,7 +51,7 @@ from .utils import (
 )
 from ..utils.ipycompat import (
     APITest, Config, FileContentsManager, GenericFileCheckpoints, to_os_path,
-    IPY3)
+    assert_http_error)
 from ..utils.sync import walk, walk_dirs
 
 
@@ -163,37 +163,44 @@ class _APITestBase(APITest):
             )
         )
 
-    # skip test as it is not satisfyable across supported notebook versions
+    # ContentsManager has different behaviour in notebook 5.5+
+    # https://github.com/jupyter/notebook/pull/3108...it now allows
+    # non empty directories to be deleted.
+    #
+    # PostgresContentsManager should continue to work the old way and
+    # prevent non-empty directories from being deleted, since it doesn't
+    # support backing up the delted directory in the OS trash can.
+    # FileContentsManager should allow non-empty directories to be deleted.
     def test_delete_non_empty_dir(self):
-        # ContentsManager has different behaviour in notebook 5.5+
-        # https://github.com/jupyter/notebook/pull/3108
-
-        # Old behaviour
-        # from notebook.tests.launchnotebook import assert_http_error
-
-        if isinstance(self.notebook.contents_manager, PostgresContentsManager):
-            _test_delete_non_empty_dir_fail(self)
+        if issubclass(self.notebook.contents_manager_class,
+                      PostgresContentsManager):
+            # make sure non-empty directories cannot be deleted with
+            # PostgresContentsManager
+            _test_delete_non_empty_dir_fail(self, u'å b')
+        elif issubclass(self.notebook.contents_manager_class,
+                        HybridContentsManager):
+            # check that one of the non empty subdirectories owned by the
+            # PostgresContentsManager cannnot be deleted
+            _test_delete_non_empty_dir_fail(self, 'Directory with spaces in')
         else:
-            _test_delete_non_empty_dir_pass(self)
+            # for all other contents managers that we test (in this case it
+            # will just be FileContentsManager) use the super class
+            # implementation of this test (i.e. make sure non-empty dirs can
+            # be deleted)
+            super(_APITestBase, self).test_delete_non_empty_dir()
 
 
-def _test_delete_non_empty_dir_fail(self):
-    if IPY3:
-        return
-    from notebook.tests.launchnotebook import assert_http_error
+def _test_delete_non_empty_dir_fail(self, path):
     with assert_http_error(400):
-        self.api.delete(u'å b')
+        self.api.delete(path)
 
 
-def _test_delete_non_empty_dir_pass(self):
-    if IPY3:
-        return
-    from notebook.tests.launchnotebook import assert_http_error
+def _test_delete_non_empty_dir_pass(self, path):
     # Test that non empty directory can be deleted
-    self.api.delete(u'å b')
+    self.api.delete(path)
     # Check if directory has actually been deleted
     with assert_http_error(404):
-        self.api.list(u'å b')
+        self.api.list(path)
 
 
 def postgres_contents_config():

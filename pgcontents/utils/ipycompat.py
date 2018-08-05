@@ -27,6 +27,7 @@ if IPY3:
     from IPython.html.services.contents.tests.test_contents_api import (
         APITest
     )
+    from IPython.html.tests.launchnotebook import assert_http_error
     from IPython.html.utils import to_os_path
     from IPython.nbformat import from_dict, reads, writes
     from IPython.nbformat.v4.nbbase import (
@@ -66,6 +67,7 @@ else:
     from notebook.services.contents.tests.test_contents_api import (
         APITest
     )
+    from notebook.tests.launchnotebook import assert_http_error
     from notebook.utils import to_os_path
     from nbformat import from_dict, reads, writes
     from nbformat.v4.nbbase import (
@@ -88,6 +90,7 @@ else:
 __all__ = [
     'APITest',
     'Any',
+    'assert_http_error'
     'Bool',
     'Checkpoints',
     'Config',
