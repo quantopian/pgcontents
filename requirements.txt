@@ -5,4 +5,4 @@ cryptography>=1.4
 psycopg2>=2.6.1
 requests>=2.7.0
 six>=1.9.0
-tox>=2.3
+notebook[test]>=4.0

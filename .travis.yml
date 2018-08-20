@@ -4,14 +4,10 @@ sudo: false
 matrix:
   include:
     - python: 2.7
-      env: NB_VERSION=ipython3
-    - python: 2.7
       env: NB_VERSION=notebook4
     - python: 2.7
       env: NB_VERSION=notebook5
 
-    - python: 3.4
-      env: NB_VERSION=ipython3
     - python: 3.4
       env: NB_VERSION=notebook4
     - python: 3.4
@@ -21,6 +17,9 @@ matrix:
       env: NB_VERSION=notebook4
     - python: 3.6
       env: NB_VERSION=notebook5
+
+    - env: FLAKE8=true
+    - env: NOTEST=true
 
 addons:
   postgresql: "9.3"
@@ -29,9 +28,11 @@ install:
   - pip install tox
 
 script:
-  - if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-$NB_VERSION,flake8; fi
-  - if [[ $TRAVIS_PYTHON_VERSION = '3.4' ]]; then tox -e py34-$NB_VERSION,flake8; fi
-  - if [[ $TRAVIS_PYTHON_VERSION = '3.6' ]]; then tox -e py36-$NB_VERSION; fi
+  - if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-notebook$NB_VERSION; fi
+  - if [[ $TRAVIS_PYTHON_VERSION = '3.4' ]]; then tox -e py34-notebook$NB_VERSION; fi
+  - if [[ $TRAVIS_PYTHON_VERSION = '3.6' ]]; then tox -e py36-notebook$NB_VERSION; fi
+  - if [[ $FLAKE8 = 'true' ]]; then tox -e notest; fi
+  - if [[ $NOTEST = 'true' ]]; then tox -e flake8; fi
 
 branches:
   only:

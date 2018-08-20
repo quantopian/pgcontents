@@ -34,7 +34,7 @@ def main():
         zip_safe=False,
         url="https://github.com/quantopian/pgcontents",
         classifiers=[
-            'Development Status :: 4 - Beta'
+            'Development Status :: 4 - Beta',
             'Framework :: IPython',
             'License :: OSI Approved :: Apache Software License',
             'Natural Language :: English',
@@ -47,9 +47,6 @@ def main():
         install_requires=reqs,
         extras_require={
             'test': test_reqs,
-            'ipy3': ['ipython[test,notebook]<4.0', 'tornado<5.0'],
-            'notebook4': ['notebook[test]>=4.0,<5.0', 'tornado<5.0'],
-            'notebook5': ['notebook[test]>=5.0']
         },
         scripts=[
             'bin/pgcontents',
