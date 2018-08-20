@@ -427,19 +427,19 @@ def rename_file(db, user_id, old_api_path, new_api_path):
 
     old_dir, old_name = split_api_filepath(old_api_path)
     new_dir, new_name = split_api_filepath(new_api_path)
-    if old_dir != new_dir:
-        raise ValueError(
-            dedent(
-                """
-                Can't rename object to new directory.
-                Old Path: {old_api_path}
-                New Path: {new_api_path}
-                """.format(
-                    old_api_path=old_api_path,
-                    new_api_path=new_api_path
-                )
-            )
-        )
+    # if old_dir != new_dir:
+    #     raise ValueError(
+    #         dedent(
+    #             """
+    #             Can't rename object to new directory.
+    #             Old Path: {old_api_path}
+    #             New Path: {new_api_path}
+    #             """.format(
+    #                 old_api_path=old_api_path,
+    #                 new_api_path=new_api_path
+    #             )
+    #         )
+    #     )
 
     db.execute(
         files.update().where(
