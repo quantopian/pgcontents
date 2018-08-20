@@ -18,10 +18,11 @@ PostgreSQL implementation of IPython/Jupyter ContentsManager API.
 from __future__ import unicode_literals
 from itertools import chain
 from tornado import web
+from traitlets import default
 
 from .api_utils import (
-    base_model,
     base_directory_model,
+    base_model,
     from_b64,
     outside_root_to_404,
     reads_base64,
@@ -57,7 +58,6 @@ from .query import (
     save_file,
 )
 from .utils.ipycompat import Bool, ContentsManager, from_dict
-from traitlets import default
 
 
 class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
@@ -377,25 +377,88 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         return model
 
     @outside_root_to_404
+    def rename_files(self, old_paths, new_paths):
+        """
+        Rename multiple objects at once. This function is specific to this
+        implementation of ContentsManager and is not in the base class.
+
+        Parameters
+        ----------
+        old_paths : list
+            List of paths for existing files or directories to be renamed. The
+            index position of each path should align with the index of its new
+            path in the `new_paths` parameter.
+        new_paths : list
+            List of new paths to which the files or directories should be
+            named. The index position of each path should align with the index
+            of its existing path in the `old_paths` parameter.
+
+        Returns
+        -------
+        renamed : int
+            The count of paths that were successfully renamed.
+
+        Raises
+        ------
+        FileExists
+            If one of the new paths already exists as a file.
+        DirectoryExists
+            If one of the new paths already exists as a directory.
+        RenameRoot
+            If one of the old paths given is the root path.
+        PathOutsideRoot
+            If one of the new paths given is outside of the root path.
+        """
+        if len(set(old_paths)) != len(old_paths):
+            self.do_409(
+                'The list of paths to rename cannot contain duplicates.',
+            )
+        if len(set(new_paths)) != len(new_paths):
+            self.do_409(
+                'The list of new path names cannot contain duplicates.',
+            )
+
+        renamed = 0
+
+        with self.engine.begin() as db:
+            for old_path, new_path in zip(old_paths, new_paths):
+                try:
+                    if self.file_exists(old_path):
+                        rename_file(db, self.user_id, old_path, new_path)
+                    elif self.dir_exists(old_path):
+                        rename_directory(db, self.user_id, old_path, new_path)
+                    else:
+                        self.no_such_entity(old_path)
+                except (FileExists, DirectoryExists):
+                    self.already_exists(new_path)
+                except RenameRoot as e:
+                    self.do_409(str(e))
+                except (web.HTTPError, PathOutsideRoot):
+                    raise
+                except Exception as e:
+                    self.log.exception(
+                        'Error renaming file/directory from %s to %s',
+                        old_path,
+                        new_path,
+                    )
+                    self.do_500(
+                        u'Unexpected error while renaming %s: %s'
+                        % (old_path, e)
+                    )
+                renamed += 1
+
+        self.log.info('Successfully renamed %d paths.', renamed)
+        return renamed
+
+    @outside_root_to_404
     def rename_file(self, old_path, path):
         """
         Rename object from old_path to path.
 
-        NOTE: This method is unfortunately named on the base class.  It
-        actually moves a file or a directory.
+        NOTE: This method is unfortunately named on the base class. It actually
+              moves files and directories as well.
         """
-        with self.engine.begin() as db:
-            try:
-                if self.file_exists(old_path):
-                    rename_file(db, self.user_id, old_path, path)
-                elif self.dir_exists(old_path):
-                    rename_directory(db, self.user_id, old_path, path)
-                else:
-                    self.no_such_entity(path)
-            except (FileExists, DirectoryExists):
-                self.already_exists(path)
-            except RenameRoot as e:
-                self.do_409(str(e))
+        return self.rename_files([old_path], [path])
 
     def _delete_non_directory(self, path):
         with self.engine.begin() as db:

@@ -1,8 +1,6 @@
 """
 Database Queries for PostgresContentsManager.
 """
-from textwrap import dedent
-
 from sqlalchemy import (
     and_,
     cast,
@@ -420,32 +418,18 @@ def rename_file(db, user_id, old_api_path, new_api_path):
     """
     Rename a file.
     """
-
     # Overwriting existing files is disallowed.
     if file_exists(db, user_id, new_api_path):
         raise FileExists(new_api_path)
 
-    old_dir, old_name = split_api_filepath(old_api_path)
     new_dir, new_name = split_api_filepath(new_api_path)
-    if old_dir != new_dir:
-        raise ValueError(
-            dedent(
-                """
-                Can't rename object to new directory.
-                Old Path: {old_api_path}
-                New Path: {new_api_path}
-                """.format(
-                    old_api_path=old_api_path,
-                    new_api_path=new_api_path
-                )
-            )
-        )
 
     db.execute(
         files.update().where(
             _file_where(user_id, old_api_path),
         ).values(
             name=new_name,
+            parent_name=new_dir,
             created_at=func.now(),
         )
     )
@@ -470,7 +454,13 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
     db.execute('SET CONSTRAINTS '
                'pgcontents.directories_parent_user_id_fkey DEFERRED')
 
-    # Update name column for the directory that's being renamed
+    old_api_dir, old_name = split_api_filepath(old_api_path)
+    new_api_dir, new_name = split_api_filepath(new_api_path)
+    new_db_dir = from_api_dirname(new_api_dir)
+
+    # Update the name and parent_name columns for the directory that is being
+    # renamed. The parent_name column will not change for a simple rename, but
+    # will if the directory is moving.
     db.execute(
         directories.update().where(
             and_(
@@ -479,33 +469,35 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
             )
         ).values(
             name=new_db_path,
+            parent_name=new_db_dir,
         )
     )
 
-    # Update the name and parent_name of any descendant directories.  Do
-    # this in a single statement so the non-deferrable check constraint
-    # is satisfied.
+    # Update the name and parent_name of any descendant directories. Do this in
+    # a single statement so the non-deferrable check constraint is satisfied.
     db.execute(
         directories.update().where(
             and_(
                 directories.c.user_id == user_id,
                 directories.c.name.startswith(old_db_path),
                 directories.c.parent_name.startswith(old_db_path),
-            )
+            ),
         ).values(
             name=func.concat(
                 new_db_path,
-                func.right(directories.c.name, -func.length(old_db_path))
+                func.right(directories.c.name, -func.length(old_db_path)),
             ),
             parent_name=func.concat(
                 new_db_path,
                 func.right(
                     directories.c.parent_name,
-                    -func.length(old_db_path)
-                )
+                    -func.length(old_db_path),
+                ),
             ),
         )
     )
+
+    return True
 
 
 def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):

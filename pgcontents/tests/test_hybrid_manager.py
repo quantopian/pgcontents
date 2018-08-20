@@ -11,6 +11,8 @@ from os.path import (
     join as osjoin,
 )
 from posixpath import join as pjoin
+
+from mock import Mock
 from six import (
     iteritems,
     itervalues,
@@ -86,6 +88,21 @@ class PostgresTestCase(PostgresContentsManagerTestCase):
     # because PostgresContentsManager is the only contents manager that
     # implements it.
     def test_get_file_id(self):
+        pass
+
+    # This test also uses `get_file_id`, but it is not pertinent to the crucial
+    # parts of the test so just mock out.
+    def test_rename_file(self):
+        HybridContentsManager.get_file_id = Mock()
+        try:
+            super(PostgresTestCase, self).test_rename_file()
+        finally:
+            del HybridContentsManager.get_file_id
+
+    # This test calls `rename_files` which HybridContentsManager is also not
+    # expected to dispatch to as PostgresContentsManager is the only contents
+    # manager that implements it.
+    def test_move_multiple_objects(self):
         pass
 
     def set_pgmgr_attribute(self, name, value):
