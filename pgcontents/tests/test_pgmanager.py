@@ -151,6 +151,21 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         cm.rename(path, updated_path)
         self.assertEqual(id_, cm.get_file_id(updated_path))
 
+    def test_rename_file(self):
+        cm = self.contents_manager
+        nb, nb_name, nb_path = self.new_notebook()
+        nb_model = cm.get(nb_path)
+        folder_model = cm.new_untitled(type='directory')
+        temp = nb_model
+        nb_destination = "Untitled Folder/Untitled.ipynb"
+        assert (nb_model['name'] == 'Untitled.ipynb')
+        assert (nb_model['path'] == 'Untitled.ipynb')
+        assert (folder_model['name'] == 'Untitled Folder')
+        assert (folder_model['path'] == 'Untitled Folder')
+
+        rename_output = cm.rename_file(nb_path, nb_destination)
+        assert (temp == nb_model)
+
     def test_rename_directory(self):
         """
         Create a directory hierarchy that looks like:

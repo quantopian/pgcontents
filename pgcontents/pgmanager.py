@@ -388,14 +388,19 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
             try:
                 if self.file_exists(old_path):
                     rename_file(db, self.user_id, old_path, path)
+                    return 'success1'
                 elif self.dir_exists(old_path):
                     rename_directory(db, self.user_id, old_path, path)
+                    return 'success2'
                 else:
                     self.no_such_entity(path)
+                    return 'fail1'
             except (FileExists, DirectoryExists):
                 self.already_exists(path)
+                return 'fail2'
             except RenameRoot as e:
                 self.do_409(str(e))
+                return 'fail3'
 
     def _delete_non_directory(self, path):
         with self.engine.begin() as db:
