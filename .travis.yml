@@ -1,11 +1,15 @@
 language: python
 sudo: false
+
 python:
   - "2.7"
   - "3.4"
+  - "3.6"
 env:
-  - IPYTHON=3
-  - IPYTHON=4
+  - NB_VERSION=4
+  - NB_VERSION=5
+  - FLAKE8=true NB_VERSION=5
+  - NOTEST=true NB_VERSION=5
 
 addons:
   postgresql: "9.3"
@@ -14,8 +18,11 @@ install:
   - pip install tox
 
 script:
-  - if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-ipython$IPYTHON,flake8; fi
-  - if [[ $TRAVIS_PYTHON_VERSION = '3.4' ]]; then tox -e py34-ipython$IPYTHON,flake8; fi
+  - if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-notebook$NB_VERSION; fi
+  - if [[ $TRAVIS_PYTHON_VERSION = '3.4' ]]; then tox -e py34-notebook$NB_VERSION; fi
+  - if [[ $TRAVIS_PYTHON_VERSION = '3.6' ]]; then tox -e py36-notebook$NB_VERSION; fi
+  - if [[ $FLAKE8 = 'true' ]]; then tox -e notest; fi
+  - if [[ $NOTEST = 'true' ]]; then tox -e flake8; fi
 
 branches:
   only:
