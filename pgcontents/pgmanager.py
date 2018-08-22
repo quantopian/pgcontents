@@ -57,6 +57,7 @@ from .query import (
     save_file,
 )
 from .utils.ipycompat import Bool, ContentsManager, from_dict
+from traitlets import default
 
 
 class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
@@ -69,15 +70,18 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         help="Create a root directory automatically?",
     )
 
-    def _checkpoints_class_default(self):
+    @default('checkpoints_class')
+    def _default_checkpoints_class(self):
         return PostgresCheckpoints
 
-    def _checkpoints_kwargs_default(self):
+    @default('checkpoints_kwargs')
+    def _default_checkpoints_kwargs(self):
+        klass = PostgresContentsManager
         try:
-            klass = PostgresContentsManager
             kw = super(klass, self)._checkpoints_kwargs_default()
         except AttributeError:
-            kw = {'parent': self, 'log': self.log}
+            kw = super(klass, self)._default_checkpoints_kwargs()
+
         kw.update({
             'create_user_on_startup': self.create_user_on_startup,
             'crypto': self.crypto,
@@ -87,7 +91,8 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         })
         return kw
 
-    def _create_directory_on_startup_default(self):
+    @default('create_directory_on_startup')
+    def _default_create_directory_on_startup(self):
         return self.create_user_on_startup
 
     def __init__(self, *args, **kwargs):

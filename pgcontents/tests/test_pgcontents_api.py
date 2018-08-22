@@ -172,12 +172,12 @@ class _APITestBase(APITest):
     # support backing up the deleted directory in the OS trash can.
     # FileContentsManager should allow non-empty directories to be deleted.
     def test_delete_non_empty_dir(self):
-        if issubclass(self.notebook.contents_manager_class,
+        if isinstance(self.notebook.contents_manager,
                       PostgresContentsManager):
             # make sure non-empty directories cannot be deleted with
             # PostgresContentsManager
             _test_delete_non_empty_dir_fail(self, u'å b')
-        elif issubclass(self.notebook.contents_manager_class,
+        elif isinstance(self.notebook.contents_manager,
                         HybridContentsManager):
             # check that one of the non-empty subdirectories owned by the
             # PostgresContentsManager cannnot be deleted
