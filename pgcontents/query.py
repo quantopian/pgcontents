@@ -294,6 +294,7 @@ def _file_where(user_id, api_path):
     Return a WHERE clause matching the given API path and user_id.
     """
     directory, name = split_api_filepath(api_path)
+    # assert(api_path != 'Untitled Folder/Untitled.ipynb')
     return and_(
         files.c.name == name,
         files.c.user_id == user_id,
@@ -416,7 +417,7 @@ def file_exists(db, user_id, path):
         return False
 
 
-def rename_file(db, user_id, old_api_path, new_api_path):
+def rename_file(db, user_id, old_api_path, new_api_path, moving=False):
     """
     Rename a file.
     """
@@ -427,31 +428,38 @@ def rename_file(db, user_id, old_api_path, new_api_path):
 
     old_dir, old_name = split_api_filepath(old_api_path)
     new_dir, new_name = split_api_filepath(new_api_path)
-    # if old_dir != new_dir:
-    #     raise ValueError(
-    #         dedent(
-    #             """
-    #             Can't rename object to new directory.
-    #             Old Path: {old_api_path}
-    #             New Path: {new_api_path}
-    #             """.format(
-    #                 old_api_path=old_api_path,
-    #                 new_api_path=new_api_path
-    #             )
-    #         )
-    #     )
+
+    files_results = db.execute(
+        select([files.c.name])
+        .where(files.c.name != "never_name_your_file_this")
+    )
+    before_rename = str(list(files_results))
+
+    if moving:
+        destination_path = new_api_path
+    else:
+        destination_path = new_name
 
     db.execute(
         files.update().where(
             _file_where(user_id, old_api_path),
         ).values(
-            name=new_name,
+            name=destination_path,
             created_at=func.now(),
         )
     )
 
+    files_results = db.execute(
+        select([files.c.name])
+        .where(files.c.name != "never_name_your_file_this")
+    )
+    after_rename = str(list(files_results))
 
-def rename_directory(db, user_id, old_api_path, new_api_path):
+    if moving:
+        return [before_rename, after_rename]
+
+
+def rename_directory(db, user_id, old_api_path, new_api_path, moving=False):
     """
     Rename a directory.
     """
@@ -470,42 +478,83 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
     db.execute('SET CONSTRAINTS '
                'pgcontents.directories_parent_user_id_fkey DEFERRED')
 
-    # Update name column for the directory that's being renamed
-    db.execute(
-        directories.update().where(
-            and_(
-                directories.c.user_id == user_id,
-                directories.c.name == old_db_path,
-            )
-        ).values(
-            name=new_db_path,
-        )
+    files_results = db.execute(
+        select([directories.c.name])
+            .where(directories.c.name != "never_name_your_file_this")
     )
+    before_rename = str(list(files_results))
 
-    # Update the name and parent_name of any descendant directories.  Do
-    # this in a single statement so the non-deferrable check constraint
-    # is satisfied.
-    db.execute(
-        directories.update().where(
-            and_(
-                directories.c.user_id == user_id,
-                directories.c.name.startswith(old_db_path),
-                directories.c.parent_name.startswith(old_db_path),
-            )
-        ).values(
-            name=func.concat(
-                new_db_path,
-                func.right(directories.c.name, -func.length(old_db_path))
-            ),
-            parent_name=func.concat(
-                new_db_path,
-                func.right(
-                    directories.c.parent_name,
-                    -func.length(old_db_path)
+    # if moving:
+    #     destination_path = new_api_path
+    # else:
+    #     destination_path = new_name
+
+    try:
+        # Update name column for the directory that's being renamed
+        if moving:
+            # Also update the parent of the renamed directory to the old_db_path
+            db.execute(
+                directories.update().where(
+                    and_(
+                        directories.c.user_id == user_id,
+                        directories.c.name == old_db_path,
+                    )
+                ).values(
+                    name=new_db_path,
+                    parent_name=old_db_path
                 )
-            ),
+            )
+        else:
+            db.execute(
+                directories.update().where(
+                    and_(
+                        directories.c.user_id == user_id,
+                        directories.c.name == old_db_path,
+                        )
+                ).values(
+                    name=new_db_path,
+                )
+            )
+
+        # Update the name and parent_name of any descendant directories.  Do
+        # this in a single statement so the non-deferrable check constraint
+        # is satisfied.
+        db.execute(
+            directories.update().where(
+                and_(
+                    directories.c.user_id == user_id,
+                    directories.c.name.startswith(old_db_path),
+                    directories.c.parent_name.startswith(old_db_path),
+                    )
+            ).values(
+                name=func.concat(
+                    new_db_path,
+                    func.right(directories.c.name, -func.length(old_db_path))
+                ),
+                parent_name=func.concat(
+                    new_db_path,
+                    func.right(
+                        directories.c.parent_name,
+                        -func.length(old_db_path)
+                    )
+                ),
+            )
         )
+    except IntegrityError as error:
+        print('Integrity failure')
+        if is_foreign_key_violation(error):
+            print('Is foreign key violation')
+    else:
+        print('Some other exception')
+
+    new_results = db.execute(
+        select([directories.c.name])
+        .where(directories.c.name != "never_name_your_file_this")
     )
+    after_rename = str(list(new_results))
+
+    if moving:
+        return [before_rename, after_rename]
 
 
 def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):

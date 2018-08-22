@@ -377,7 +377,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         return model
 
     @outside_root_to_404
-    def rename_file(self, old_path, path):
+    def rename_file(self, old_path, path, moving=False):
         """
         Rename object from old_path to path.
 
@@ -387,20 +387,20 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         with self.engine.begin() as db:
             try:
                 if self.file_exists(old_path):
-                    rename_file(db, self.user_id, old_path, path)
-                    return 'success1'
+                    rename_outputs = rename_file(db, self.user_id, old_path, path, moving)
+                    return ['renaming_file', rename_outputs]
                 elif self.dir_exists(old_path):
-                    rename_directory(db, self.user_id, old_path, path)
-                    return 'success2'
+                    rename_outputs = rename_directory(db, self.user_id, old_path, path, moving)
+                    return ['renaming_directory', rename_outputs]
                 else:
                     self.no_such_entity(path)
-                    return 'fail1'
+                    return 'bad_path_failure'
             except (FileExists, DirectoryExists):
                 self.already_exists(path)
-                return 'fail2'
+                return 'already_exists_failure'
             except RenameRoot as e:
                 self.do_409(str(e))
-                return 'fail3'
+                return 'rename_root_failure'
 
     def _delete_non_directory(self, path):
         with self.engine.begin() as db:

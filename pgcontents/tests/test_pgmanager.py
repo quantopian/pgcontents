@@ -151,20 +151,73 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         cm.rename(path, updated_path)
         self.assertEqual(id_, cm.get_file_id(updated_path))
 
-    def test_rename_file(self):
+    def test_simple_file_rename(self):
+        cm = self.contents_manager
+        nb, nb_name, nb_path = self.new_notebook()
+        nb_model = cm.get(nb_path)
+        assert (nb_model['name'] == 'Untitled.ipynb')
+
+        # A simple rename of the file within the same directory
+        cm.get_file_id('Untitled.ipynb')
+        rename_output = cm.rename_file(nb_path, 'tempo.ipynb')
+        assert (rename_output[0] == 'renaming_file')
+        cm.get('tempo.ipynb')
+        cm.get_file_id('tempo.ipynb')
+
+    def test_rename_file_to_move(self):
         cm = self.contents_manager
         nb, nb_name, nb_path = self.new_notebook()
         nb_model = cm.get(nb_path)
         folder_model = cm.new_untitled(type='directory')
-        temp = nb_model
         nb_destination = "Untitled Folder/Untitled.ipynb"
         assert (nb_model['name'] == 'Untitled.ipynb')
         assert (nb_model['path'] == 'Untitled.ipynb')
         assert (folder_model['name'] == 'Untitled Folder')
         assert (folder_model['path'] == 'Untitled Folder')
 
-        rename_output = cm.rename_file(nb_path, nb_destination)
-        assert (temp == nb_model)
+        # A rename of the file into another directory
+        rename_output = cm.rename_file('Untitled.ipynb', nb_destination, moving=True)
+        # Confirm we are calling the correct method in pgmanager
+        assert (rename_output[0] == 'renaming_file')
+
+        updated_folder_model = cm.get('Untitled Folder')
+        assert (updated_folder_model['path'] == 'Untitled Folder')
+
+        with assertRaisesHTTPError(self, 404):
+            # Should raise a 404 because cm shouldn't be able to find this file with this path
+            cm.get('Untitled.ipynb')
+
+        # Confirm that the file has moved into the folder
+        assert (rename_output[1][1] == "[('Untitled Folder/Untitled.ipynb',)]")
+
+    def test_rename_directory_to_move(self):
+        # Rename a file into a folder, then rename that folder into another folder
+        # This is the most complicated case. If the notebook's properties remain intact, then this would be successful
+        cm = self.contents_manager
+
+        parent_folder_model = cm.new_untitled(type='directory')
+        child_folder_model = cm.new_untitled(type='directory')
+        assert (parent_folder_model['name'] == 'Untitled Folder')
+        assert (parent_folder_model['path'] == 'Untitled Folder')
+        assert (child_folder_model['name'] == 'Untitled Folder 1')
+        assert (child_folder_model['path'] == 'Untitled Folder 1')
+        folder_destination = "Untitled Folder/Untitled Folder 1"
+
+        # A rename of child folder into parent folder
+        rename_output = cm.rename_file('Untitled Folder 1', folder_destination, moving=True)
+        # Confirm we are calling the correct method in pgmanager
+        assert (rename_output[0] == 'renaming_directory')
+
+        updated_folder_model = cm.get('Untitled Folder')
+        assert (updated_folder_model['path'] == 'Untitled Folder')
+
+        with assertRaisesHTTPError(self, 404):
+            # Should raise a 404 because cm shouldn't be able to find child folder with this path
+            cm.get('Untitled Folder 1')
+        cm.get('Untitled Folder')
+
+        # Confirm that the child folder has moved into the parent folder
+        assert (rename_output[1][1] == "[('Untitled Folder/Untitled Folder 1',)]")
 
     def test_rename_directory(self):
         """
