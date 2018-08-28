@@ -50,7 +50,8 @@ class FileTestCase(TestContentsManager):
     def setUp(self):
         self._temp_dir = TemporaryDirectory()
         self.td = self._temp_dir.name
-        self._file_manager = FileContentsManager(root_dir=self.td)
+        self._file_manager = FileContentsManager(root_dir=self.td,
+                                                 delete_to_trash=False)
         self.contents_manager = HybridContentsManager(
             managers={'': self._file_manager}
         )
@@ -109,7 +110,8 @@ class MultiRootTestCase(TestCase):
             prefix: v.name for prefix, v in iteritems(self.temp_dirs)
         }
         self._managers = {
-            prefix: FileContentsManager(root_dir=self.temp_dir_names[prefix])
+            prefix: FileContentsManager(root_dir=self.temp_dir_names[prefix],
+                                        delete_to_trash=False)
             for prefix in mgr_roots
         }
         self.contents_manager = HybridContentsManager(managers=self._managers)

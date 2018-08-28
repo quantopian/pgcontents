@@ -182,9 +182,13 @@ class _APITestBase(APITest):
             # check that one of the non-empty subdirectories owned by the
             # PostgresContentsManager cannnot be deleted
             _test_delete_non_empty_dir_fail(self, 'Directory with spaces in')
+        elif isinstance(self.notebook.contents_manager, FileContentsManager):
+            # use the 'delete_to_trash' flag to avoid moving the file to the
+            # trash, because it doesn't work on jenkins
+            self.notebook.contents_manager.delete_to_trash = False
+            _test_delete_non_empty_dir_fail(self, u'å b')
         else:
-            # for all other contents managers that we test (in this case it
-            # will just be FileContentsManager) use the super class
+            # for all other contents managers that we test use the super class
             # implementation of this test (i.e. make sure non-empty dirs can
             # be deleted)
             super(_APITestBase, self).test_delete_non_empty_dir()
@@ -431,7 +435,10 @@ class HybridContentsPGRootAPITest(PostgresContentsAPITest):
         }
         config.HybridContentsManager.manager_kwargs = {
             '': {'user_id': 'test', 'db_url': TEST_DB_URL},
-            cls.files_prefix: {'root_dir': td.name},
+            cls.files_prefix: {
+                'root_dir': td.name,
+                'delete_to_trash': False
+            },
         }
         return config
 
