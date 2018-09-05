@@ -26,12 +26,13 @@ from .utils import (
     assertRaisesHTTPError,
     clear_test_db,
     make_fernet,
+    _norm_unicode,
     TEST_DB_URL,
     remigrate_test_schema,
 )
 from ..crypto import FernetEncryption
 from ..utils.ipycompat import TestContentsManager
-
+from ..utils.sync import walk_files_with_content
 
 setup_module = remigrate_test_schema
 
@@ -107,6 +108,39 @@ class PostgresContentsManagerTestCase(TestContentsManager):
                     entry['path'],
                     '/'.join([api_path, 'nb.ipynb']),
                 )
+
+    def test_walk_files_with_content(self):
+        all_dirs = ['foo', 'bar', 'foo/bar', 'foo/bar/foo', 'foo/bar/foo/bar']
+        for dir in all_dirs:
+            self.make_populated_dir(dir)
+
+        expected_file_paths = [
+            u'bar/file.txt',
+            u'bar/nb.ipynb',
+            u'foo/file.txt',
+            u'foo/nb.ipynb',
+            u'foo/bar/file.txt',
+            u'foo/bar/nb.ipynb',
+            u'foo/bar/foo/file.txt',
+            u'foo/bar/foo/nb.ipynb',
+            u'foo/bar/foo/bar/file.txt',
+            u'foo/bar/foo/bar/nb.ipynb',
+        ]
+
+        cm = self.contents_manager
+
+        filepaths = []
+        for file in walk_files_with_content(cm):
+            self.assertEqual(
+                file,
+                cm.get(file['path'], content=True)
+            )
+            filepaths.append(_norm_unicode(file['path']))
+
+        self.assertEqual(
+            filepaths.sort(),
+            expected_file_paths.sort()
+        )
 
     def test_modified_date(self):
 
