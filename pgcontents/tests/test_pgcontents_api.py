@@ -62,6 +62,10 @@ class _APITestBase(APITest):
     """
     APITest that also runs a test for our implementation of `walk`.
     """
+
+    config = Config()
+    config.FileContentsManager.delete_to_trash = False
+
     def test_walk(self):
         """
         Test ContentsManager.walk.
@@ -377,6 +381,7 @@ def postgres_checkpoints_config():
     """
     config = Config()
     config.NotebookApp.contents_manager_class = FileContentsManager
+    config.FileContentsManager.delete_to_trash = False
     config.ContentsManager.checkpoints_class = PostgresCheckpoints
     config.PostgresCheckpoints.user_id = 'test'
     config.PostgresCheckpoints.db_url = TEST_DB_URL
