@@ -176,9 +176,7 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         assert (folder_model['path'] == 'Untitled Folder')
 
         # A rename of the file into another directory
-        rename_output = cm.rename_file('Untitled.ipynb', nb_destination, moving=True)
-        # Confirm we are calling the correct method in pgmanager
-        assert (rename_output[0] == 'renaming_file')
+        cm.rename('Untitled.ipynb', nb_destination)
 
         updated_folder_model = cm.get('Untitled Folder')
         assert (updated_folder_model['path'] == 'Untitled Folder')
@@ -186,9 +184,6 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         with assertRaisesHTTPError(self, 404):
             # Should raise a 404 because cm shouldn't be able to find this file with this path
             cm.get('Untitled.ipynb')
-
-        # Confirm that the file has moved into the folder
-        assert (rename_output[1][1] == "[('Untitled Folder/Untitled.ipynb',)]")
 
     def test_rename_directory_to_move(self):
         # Rename a file into a folder, then rename that folder into another folder
@@ -204,7 +199,7 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         folder_destination = "Untitled Folder/Untitled Folder 1"
 
         # A rename of child folder into parent folder
-        rename_output = cm.rename_file('Untitled Folder 1', folder_destination, moving=True)
+        rename_output = cm.rename_file('Untitled Folder 1', folder_destination)
         # Confirm we are calling the correct method in pgmanager
         assert (rename_output[0] == 'renaming_directory')
 

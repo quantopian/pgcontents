@@ -377,7 +377,7 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         return model
 
     @outside_root_to_404
-    def rename_file(self, old_path, path, moving=False):
+    def rename_file(self, old_path, path):
         """
         Rename object from old_path to path.
 
@@ -387,10 +387,10 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         with self.engine.begin() as db:
             try:
                 if self.file_exists(old_path):
-                    rename_outputs = rename_file(db, self.user_id, old_path, path, moving)
+                    rename_outputs = rename_file(db, self.user_id, old_path, path)
                     return ['renaming_file', rename_outputs]
                 elif self.dir_exists(old_path):
-                    rename_outputs = rename_directory(db, self.user_id, old_path, path, moving)
+                    rename_outputs = rename_directory(db, self.user_id, old_path, path)
                     return ['renaming_directory', rename_outputs]
                 else:
                     self.no_such_entity(path)

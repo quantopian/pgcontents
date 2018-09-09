@@ -417,7 +417,7 @@ def file_exists(db, user_id, path):
         return False
 
 
-def rename_file(db, user_id, old_api_path, new_api_path, moving=False):
+def rename_file(db, user_id, old_api_path, new_api_path):
     """
     Rename a file.
     """
@@ -426,37 +426,29 @@ def rename_file(db, user_id, old_api_path, new_api_path, moving=False):
     if file_exists(db, user_id, new_api_path):
         raise FileExists(new_api_path)
 
-    old_dir, old_name = split_api_filepath(old_api_path)
-    new_dir, new_name = split_api_filepath(new_api_path)
+    # old_dir, old_name = split_api_filepath(old_api_path)
+    # new_dir, new_name = split_api_filepath(new_api_path)
 
-    files_results = db.execute(
-        select([files.c.name])
-        .where(files.c.name != "never_name_your_file_this")
-    )
-    before_rename = str(list(files_results))
-
-    if moving:
-        destination_path = new_api_path
-    else:
-        destination_path = new_name
+    # files_results = db.execute(
+    #     select([files.c.name])
+    #     .where(files.c.name != "never_name_your_file_this")
+    # )
+    # before_rename = str(list(files_results))
 
     db.execute(
         files.update().where(
             _file_where(user_id, old_api_path),
         ).values(
-            name=destination_path,
+            name=new_api_path,
             created_at=func.now(),
         )
     )
 
-    files_results = db.execute(
-        select([files.c.name])
-        .where(files.c.name != "never_name_your_file_this")
-    )
-    after_rename = str(list(files_results))
-
-    if moving:
-        return [before_rename, after_rename]
+    # files_results = db.execute(
+    #     select([files.c.name])
+    #     .where(files.c.name != "never_name_your_file_this")
+    # )
+    # after_rename = str(list(files_results))
 
 
 def rename_directory(db, user_id, old_api_path, new_api_path, moving=False):
