@@ -76,6 +76,15 @@ def walk_files(mgr):
             yield file_
 
 
+def walk_files_with_content(mgr):
+    """
+    Iterate over the contents of all files visible to ``mgr``.
+    """
+    for _, _, files in walk(mgr):
+        for f in files:
+            yield mgr.get(f, content=True)
+
+
 def all_user_ids(engine):
     """
     Get a list of user_ids from an engine.
