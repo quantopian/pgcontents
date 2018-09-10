@@ -427,28 +427,17 @@ def rename_file(db, user_id, old_api_path, new_api_path):
         raise FileExists(new_api_path)
 
     # old_dir, old_name = split_api_filepath(old_api_path)
-    # new_dir, new_name = split_api_filepath(new_api_path)
-
-    # files_results = db.execute(
-    #     select([files.c.name])
-    #     .where(files.c.name != "never_name_your_file_this")
-    # )
-    # before_rename = str(list(files_results))
+    new_dir, new_name = split_api_filepath(new_api_path)
 
     db.execute(
         files.update().where(
             _file_where(user_id, old_api_path),
         ).values(
-            name=new_api_path,
+            name=new_name,
+            parent_name=new_dir,
             created_at=func.now(),
         )
     )
-
-    # files_results = db.execute(
-    #     select([files.c.name])
-    #     .where(files.c.name != "never_name_your_file_this")
-    # )
-    # after_rename = str(list(files_results))
 
 
 def rename_directory(db, user_id, old_api_path, new_api_path, moving=False):
