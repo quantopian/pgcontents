@@ -142,21 +142,17 @@ def path_dispatch_old_new(mname, returns_model):
             new_path, self.managers,
         )
         if old_mgr is not new_mgr:
-            # TODO: Consider supporting this via get+delete+save.
-            raise HTTPError(
-                400,
-                "Can't move files between backends ({old} -> {new})".format(
-                    old=old_path,
-                    new=new_path,
-                )
+            model = old_mgr.get(old_mgr_path)
+            result = new_mgr.save(model, new_mgr_path)
+            old_mgr.delete(old_mgr_path)
+        else:
+            assert new_prefix == old_prefix
+            result = getattr(new_mgr, mname)(
+                old_mgr_path,
+                new_mgr_path,
+                *args,
+                **kwargs
             )
-        assert new_prefix == old_prefix
-        result = getattr(new_mgr, mname)(
-            old_mgr_path,
-            new_mgr_path,
-            *args,
-            **kwargs
-        )
         if returns_model and new_prefix:
             return _apply_prefix(new_prefix, result)
         else:
