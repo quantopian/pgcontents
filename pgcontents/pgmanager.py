@@ -387,20 +387,10 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         with self.engine.begin() as db:
             try:
                 if self.file_exists(old_path):
-                    rename_outputs = rename_file(
-                        db,
-                        self.user_id,
-                        old_path,
-                        path,
-                    )
+                    rename_file(db, self.user_id, old_path, path)
                     return 'renamed_file'
                 elif self.dir_exists(old_path):
-                    rename_outputs = rename_directory(
-                        db,
-                        self.user_id,
-                        old_path,
-                        path,
-                    )
+                    rename_directory(db, self.user_id, old_path, path)
                     return 'renamed_directory'
                 else:
                     self.no_such_entity(path)
@@ -408,11 +398,14 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
                 self.already_exists(path)
             except RenameRoot as e:
                 self.do_409(str(e))
-            except Exception:
+            except Exception as e:
                 self.log.exception(
                     'Error renaming file/directory from %s to %s',
                     old_path,
                     path,
+                )
+                self.do_500(
+                    u'Unexpected error while renaming %s: %s' % (old_path, e)
                 )
 
     def _delete_non_directory(self, path):

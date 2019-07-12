@@ -324,6 +324,9 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         )
         assert rename_output == 'renamed_directory'
 
+        bar_model = cm.get('foo/bar')
+        assert len(bar_model['content']) == 0
+
         biz_model = cm.get('biz')
         assert len(biz_model['content']) == 2
 

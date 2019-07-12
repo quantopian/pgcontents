@@ -294,7 +294,6 @@ def _file_where(user_id, api_path):
     Return a WHERE clause matching the given API path and user_id.
     """
     directory, name = split_api_filepath(api_path)
-    # assert(api_path != 'Untitled Folder/Untitled.ipynb')
     return and_(
         files.c.name == name,
         files.c.user_id == user_id,
@@ -457,16 +456,6 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
     db.execute('SET CONSTRAINTS '
                'pgcontents.directories_parent_user_id_fkey DEFERRED')
 
-    # files_results = db.execute(
-    #     select([directories.c.name])
-    #         .where(directories.c.name != "never_name_your_file_this")
-    # )
-    # before_rename = str(list(files_results))
-    # if moving:
-    #     destination_path = new_api_path
-    # else:
-    #     destination_path = new_name
-
     old_api_dir, old_name = split_api_filepath(old_api_path)
     new_api_dir, new_name = split_api_filepath(new_api_path)
     new_db_dir = from_api_dirname(new_api_dir)
@@ -498,13 +487,10 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
         ).values(
             name=func.concat(
                 new_db_path,
-                # Is this right still? Need to make sure the parent dir of
-                # the sub dirs/files is right.
                 func.right(directories.c.name, -func.length(old_db_path)),
             ),
             parent_name=func.concat(
                 new_db_path,
-                # Is this right still?
                 func.right(
                     directories.c.parent_name,
                     -func.length(old_db_path),
