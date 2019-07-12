@@ -421,12 +421,10 @@ def rename_file(db, user_id, old_api_path, new_api_path):
     """
     Rename a file.
     """
-
     # Overwriting existing files is disallowed.
     if file_exists(db, user_id, new_api_path):
         raise FileExists(new_api_path)
 
-    # old_dir, old_name = split_api_filepath(old_api_path)
     new_dir, new_name = split_api_filepath(new_api_path)
 
     db.execute(
@@ -440,7 +438,7 @@ def rename_file(db, user_id, old_api_path, new_api_path):
     )
 
 
-def rename_directory(db, user_id, old_api_path, new_api_path, moving=False):
+def rename_directory(db, user_id, old_api_path, new_api_path):
     """
     Rename a directory.
     """
@@ -459,83 +457,63 @@ def rename_directory(db, user_id, old_api_path, new_api_path, moving=False):
     db.execute('SET CONSTRAINTS '
                'pgcontents.directories_parent_user_id_fkey DEFERRED')
 
-    files_results = db.execute(
-        select([directories.c.name])
-            .where(directories.c.name != "never_name_your_file_this")
-    )
-    before_rename = str(list(files_results))
-
+    # files_results = db.execute(
+    #     select([directories.c.name])
+    #         .where(directories.c.name != "never_name_your_file_this")
+    # )
+    # before_rename = str(list(files_results))
     # if moving:
     #     destination_path = new_api_path
     # else:
     #     destination_path = new_name
 
-    try:
-        # Update name column for the directory that's being renamed
-        if moving:
-            # Also update the parent of the renamed directory to the old_db_path
-            db.execute(
-                directories.update().where(
-                    and_(
-                        directories.c.user_id == user_id,
-                        directories.c.name == old_db_path,
-                    )
-                ).values(
-                    name=new_db_path,
-                    parent_name=old_db_path
-                )
-            )
-        else:
-            db.execute(
-                directories.update().where(
-                    and_(
-                        directories.c.user_id == user_id,
-                        directories.c.name == old_db_path,
-                        )
-                ).values(
-                    name=new_db_path,
-                )
-            )
+    old_api_dir, old_name = split_api_filepath(old_api_path)
+    new_api_dir, new_name = split_api_filepath(new_api_path)
+    new_db_dir = from_api_dirname(new_api_dir)
 
-        # Update the name and parent_name of any descendant directories.  Do
-        # this in a single statement so the non-deferrable check constraint
-        # is satisfied.
-        db.execute(
-            directories.update().where(
-                and_(
-                    directories.c.user_id == user_id,
-                    directories.c.name.startswith(old_db_path),
-                    directories.c.parent_name.startswith(old_db_path),
-                    )
-            ).values(
-                name=func.concat(
-                    new_db_path,
-                    func.right(directories.c.name, -func.length(old_db_path))
-                ),
-                parent_name=func.concat(
-                    new_db_path,
-                    func.right(
-                        directories.c.parent_name,
-                        -func.length(old_db_path)
-                    )
-                ),
+    # Update the name and parent_name columns for the directory that is being
+    # renamed. The parent_name column will not change for a simple rename, but
+    # will if the directory is moving.
+    db.execute(
+        directories.update().where(
+            and_(
+                directories.c.user_id == user_id,
+                directories.c.name == old_db_path,
             )
+        ).values(
+            name=new_db_path,
+            parent_name=new_db_dir,
         )
-    except IntegrityError as error:
-        print('Integrity failure')
-        if is_foreign_key_violation(error):
-            print('Is foreign key violation')
-    else:
-        print('Some other exception')
-
-    new_results = db.execute(
-        select([directories.c.name])
-        .where(directories.c.name != "never_name_your_file_this")
     )
-    after_rename = str(list(new_results))
 
-    if moving:
-        return [before_rename, after_rename]
+    # Update the name and parent_name of any descendant directories. Do this in
+    # a single statement so the non-deferrable check constraint is satisfied.
+    db.execute(
+        directories.update().where(
+            and_(
+                directories.c.user_id == user_id,
+                directories.c.name.startswith(old_db_path),
+                directories.c.parent_name.startswith(old_db_path),
+            ),
+        ).values(
+            name=func.concat(
+                new_db_path,
+                # Is this right still? Need to make sure the parent dir of
+                # the sub dirs/files is right.
+                func.right(directories.c.name, -func.length(old_db_path)),
+            ),
+            parent_name=func.concat(
+                new_db_path,
+                # Is this right still?
+                func.right(
+                    directories.c.parent_name,
+                    -func.length(old_db_path),
+                ),
+            ),
+        )
+    )
+
+    return True
 
 
 def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
