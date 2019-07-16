@@ -379,10 +379,34 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
     @outside_root_to_404
     def rename_files(self, old_paths, new_paths):
         """
-        Rename object from old_path to path.
+        Rename multiple objects at once.
 
-        NOTE: This method is unfortunately named on the base class. It actually
-        moves files and directories as well.
+        Parameters
+        ----------
+        old_paths : list
+            List of paths for existing files or directories to be renamed. The
+            index position of each path should align with the index of its new
+            path in the `new_paths` parameter.
+        new_paths : list
+            List of new paths to which the files or directories should be
+            named. The index position of each path should align with the index
+            of its existing path in the `old_paths` parameter.
+
+        Returns
+        -------
+        renamed : int
+            The count of paths that were successfully renamed.
+
+        Raises
+        ------
+        FileExists
+            If one of the new paths already exists as a file.
+        DirectoryExists
+            If one of the new paths already exists as a directory.
+        RenameRoot
+            If one of the old paths given is the root path.
+        PathOutsideRoot
+            If one of the new paths given is outside of the root path.
         """
         renamed = 0
 
@@ -418,6 +442,12 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
 
     @outside_root_to_404
     def rename_file(self, old_path, path):
+        """
+        Rename object from old_path to path.
+
+        NOTE: This method is unfortunately named on the base class. It actually
+              moves files and directories as well.
+        """
         return self.rename_files([old_path], [path])
 
     def _delete_non_directory(self, path):

@@ -478,6 +478,8 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         with assertRaisesHTTPError(self, 404):
             cm.rename('../foo', '../bar')
         with assertRaisesHTTPError(self, 404):
+            cm.rename_files(['../foo'], ['../bar'])
+        with assertRaisesHTTPError(self, 404):
             cm.save(model={
                 'type': 'file',
                 'content': u'',
