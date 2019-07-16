@@ -377,36 +377,48 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         return model
 
     @outside_root_to_404
-    def rename_file(self, old_path, path):
+    def rename_files(self, old_paths, new_paths):
         """
         Rename object from old_path to path.
 
         NOTE: This method is unfortunately named on the base class. It actually
         moves files and directories as well.
         """
+        renamed = 0
+
         with self.engine.begin() as db:
-            try:
-                if self.file_exists(old_path):
-                    rename_file(db, self.user_id, old_path, path)
-                    return 'renamed_file'
-                elif self.dir_exists(old_path):
-                    rename_directory(db, self.user_id, old_path, path)
-                    return 'renamed_directory'
-                else:
-                    self.no_such_entity(path)
-            except (FileExists, DirectoryExists):
-                self.already_exists(path)
-            except RenameRoot as e:
-                self.do_409(str(e))
-            except Exception as e:
-                self.log.exception(
-                    'Error renaming file/directory from %s to %s',
-                    old_path,
-                    path,
-                )
-                self.do_500(
-                    u'Unexpected error while renaming %s: %s' % (old_path, e)
-                )
+            for old_path, new_path in zip(old_paths, new_paths):
+                try:
+                    if self.file_exists(old_path):
+                        rename_file(db, self.user_id, old_path, new_path)
+                    elif self.dir_exists(old_path):
+                        rename_directory(db, self.user_id, old_path, new_path)
+                    else:
+                        self.no_such_entity(old_path)
+                except (FileExists, DirectoryExists):
+                    self.already_exists(new_path)
+                except RenameRoot as e:
+                    self.do_409(str(e))
+                except (web.HTTPError, PathOutsideRoot):
+                    raise
+                except Exception as e:
+                    self.log.exception(
+                        'Error renaming file/directory from %s to %s',
+                        old_path,
+                        new_path,
+                    )
+                    self.do_500(
+                        u'Unexpected error while renaming %s: %s'
+                        % (old_path, e)
+                    )
+                renamed += 1
+
+        self.log.info('Successfully renamed %d paths.', renamed)
+        return renamed
+
+    @outside_root_to_404
+    def rename_file(self, old_path, path):
+        return self.rename_files([old_path], [path])
 
     def _delete_non_directory(self, path):
         with self.engine.begin() as db:
