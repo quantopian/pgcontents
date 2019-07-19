@@ -650,6 +650,9 @@ def move_single_remote_checkpoint(db,
 def move_remote_checkpoints(db, user_id, src_api_path, dest_api_path):
     src_db_path = from_api_filename(src_api_path)
     dest_db_path = from_api_filename(dest_api_path)
+
+    # Update the paths of the checkpoints for the file being renamed. If the
+    # source path is for a directory then this is a no-op.
     db.execute(
         remote_checkpoints.update().where(
             and_(
@@ -659,6 +662,25 @@ def move_remote_checkpoints(db, user_id, src_api_path, dest_api_path):
         ).values(
             path=dest_db_path,
         ),
+    )
+
+    # If the given source path is for a directory, update the paths of the
+    # checkpoints for all files in that directory and its subdirectories.
+    db.execute(
+        remote_checkpoints.update().where(
+            and_(
+                remote_checkpoints.c.user_id == user_id,
+                remote_checkpoints.c.path.startswith(src_db_path),
+            ),
+        ).values(
+            path=func.concat(
+                dest_db_path,
+                func.right(
+                    remote_checkpoints.c.path,
+                    -func.length(src_db_path),
+                ),
+            ),
+        )
     )
 
 
