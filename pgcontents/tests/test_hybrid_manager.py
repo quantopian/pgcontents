@@ -12,7 +12,6 @@ from os.path import (
 )
 from posixpath import join as pjoin
 
-from mock import Mock
 from six import (
     iteritems,
     itervalues,
@@ -289,9 +288,12 @@ class MultiRootTestCase(TestCase):
             with assertRaisesHTTPError(self, 400):
                 cm.delete(prefix)
 
-    # def test_cant_rename_across_roots(self):
-    #     from pdb import set_trace; set_trace()
-    #     a = 2
+    def test_cant_rename_across_managers(self):
+        cm = self.contents_manager
+        cm.new_untitled(ext='.ipynb')
+
+        with assertRaisesHTTPError(self, 400):
+            cm.rename('Untitled.ipynb', 'A/Untitled.ipynb')
 
     def tearDown(self):
         for dir_ in itervalues(self.temp_dirs):

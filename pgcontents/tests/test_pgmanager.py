@@ -207,13 +207,13 @@ class PostgresContentsManagerTestCase(TestContentsManager):
             cm.rename('new_name.ipynb', 'new_name.ipynb')
 
         # Test that renaming a non-existent file fails.
-        with self.assertRaisesHTTPError(self, 409):
+        with assertRaisesHTTPError(self, 404):
             cm.rename('non_existent.ipynb', 'some_name.ipynb')
 
         # Now test moving a file.
         self.make_dir('My Folder')
         nb_destination = 'My Folder/new_name.ipynb'
-        cm.rename_file('new_name.ipynb', nb_destination)
+        cm.rename('new_name.ipynb', nb_destination)
 
         updated_notebook_model = cm.get(nb_destination)
         assert updated_notebook_model['name'] == 'new_name.ipynb'
@@ -290,7 +290,7 @@ class PostgresContentsManagerTestCase(TestContentsManager):
 
         # A rename moving one folder into the other.
         child_folder_destination = 'Parent Folder/Child Folder'
-        cm.rename_file('Child Folder', child_folder_destination)
+        cm.rename('Child Folder', child_folder_destination)
 
         updated_parent_model = cm.get('Parent Folder')
         assert updated_parent_model['path'] == 'Parent Folder'
@@ -307,7 +307,7 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         assert updated_child_model['path'] == child_folder_destination
 
         # Test moving it back up.
-        cm.rename_file('Parent Folder/Child Folder', 'Child Folder')
+        cm.rename('Parent Folder/Child Folder', 'Child Folder')
 
         updated_parent_model = cm.get('Parent Folder')
         assert len(updated_parent_model['content']) == 0
@@ -335,7 +335,7 @@ class PostgresContentsManagerTestCase(TestContentsManager):
                 self.make_dir(dir_)
 
         # Move the populated directory over to "biz".
-        cm.rename_file('foo/bar/populated_dir', 'biz/populated_dir')
+        cm.rename('foo/bar/populated_dir', 'biz/populated_dir')
 
         bar_model = cm.get('foo/bar')
         assert len(bar_model['content']) == 0

@@ -221,7 +221,6 @@ class HybridContentsManager(ContentsManager):
 
     save = path_dispatch2('save', 'model', True)
     rename = path_dispatch_old_new('rename', False)
-    rename_file = path_dispatch_old_new('rename_file', False)
 
     __get = path_dispatch1('get', True)
     __delete = path_dispatch1('delete', False)

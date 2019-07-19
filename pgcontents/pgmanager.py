@@ -392,8 +392,6 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
                     rename_directory(db, self.user_id, old_path, path)
                 else:
                     self.no_such_entity(old_path)
-                    from pdb import set_trace; set_trace()
-                    return 'bad_path_failure'
             except (FileExists, DirectoryExists):
                 self.already_exists(path)
             except RenameRoot as e:
