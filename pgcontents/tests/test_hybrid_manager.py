@@ -90,21 +90,6 @@ class PostgresTestCase(PostgresContentsManagerTestCase):
     def test_get_file_id(self):
         pass
 
-    # This test also uses `get_file_id`, but it is not pertinent to the crucial
-    # parts of the test so just mock out.
-    def test_rename_file(self):
-        HybridContentsManager.get_file_id = Mock()
-        try:
-            super(PostgresTestCase, self).test_rename_file()
-        finally:
-            del HybridContentsManager.get_file_id
-
-    # This test calls `rename_files` which HybridContentsManager is also not
-    # expected to dispatch to as PostgresContentsManager is the only contents
-    # manager that implements it.
-    def test_move_multiple_objects(self):
-        pass
-
     def set_pgmgr_attribute(self, name, value):
         setattr(self._pgmanager, name, value)
 
@@ -303,6 +288,10 @@ class MultiRootTestCase(TestCase):
         for prefix in self.temp_dirs:
             with assertRaisesHTTPError(self, 400):
                 cm.delete(prefix)
+
+    # def test_cant_rename_across_roots(self):
+    #     from pdb import set_trace; set_trace()
+    #     a = 2
 
     def tearDown(self):
         for dir_ in itervalues(self.temp_dirs):

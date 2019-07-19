@@ -197,6 +197,37 @@ class _APITestBase(APITest):
             # be deleted)
             super(_APITestBase, self).test_delete_non_empty_dir()
 
+    def test_checkpoints_move_with_file(self):
+        # Read initial file state.
+        self.api.read('foo/a.ipynb')
+
+        # Create a checkpoint of initial state.
+        response = self.api.new_checkpoint('foo/a.ipynb')
+        response_json = response.json()
+
+        # Move the file down.
+        self.api.rename('foo/a.ipynb', 'foo/bar/a.ipynb')
+
+        # Looking for checkpoints in the old location should yield no results.
+        self.assertEqual(self.api.get_checkpoints('foo/a.ipynb').json(), [])
+
+        # Looking for checkpoints in the new location should work.
+        checkpoints = self.api.get_checkpoints('foo/bar/a.ipynb').json()
+        self.assertEqual(checkpoints, [response_json])
+
+        # Move the file back up.
+        self.api.rename('foo/bar/a.ipynb', 'foo/a.ipynb')
+
+        # Looking for checkpoints in the old location should yield no results.
+        self.assertEqual(
+            self.api.get_checkpoints('foo/bar/a.ipynb').json(),
+            [],
+        )
+
+        # Looking for checkpoints in the new location should work.
+        checkpoints = self.api.get_checkpoints('foo/a.ipynb').json()
+        self.assertEqual(checkpoints, [response_json])
+
 
 def _test_delete_non_empty_dir_fail(self, path):
     with assert_http_error(400):

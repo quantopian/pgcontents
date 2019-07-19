@@ -454,7 +454,6 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
     db.execute('SET CONSTRAINTS '
                'pgcontents.directories_parent_user_id_fkey DEFERRED')
 
-    old_api_dir, old_name = split_api_filepath(old_api_path)
     new_api_dir, new_name = split_api_filepath(new_api_path)
     new_db_dir = from_api_dirname(new_api_dir)
 
@@ -496,8 +495,6 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
             ),
         )
     )
-
-    return True
 
 
 def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):

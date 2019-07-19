@@ -188,67 +188,40 @@ class PostgresContentsManagerTestCase(TestContentsManager):
     def test_rename_file(self):
         cm = self.contents_manager
         nb, nb_name, nb_path = self.new_notebook()
-        nb_model = cm.get(nb_path)
-        assert nb_model['name'] == 'Untitled.ipynb'
+        assert nb_name == 'Untitled.ipynb'
 
         # A simple rename of the file within the same directory.
-        file_id = cm.get_file_id('Untitled.ipynb')
-        renamed = cm.rename_file(nb_path, 'new_name.ipynb')
-        assert renamed == 1
+        cm.rename(nb_path, 'new_name.ipynb')
         assert cm.get('new_name.ipynb')['path'] == 'new_name.ipynb'
-        assert cm.get_file_id('new_name.ipynb') == file_id
 
         # The old file name should no longer be found.
         with assertRaisesHTTPError(self, 404):
-            cm.get('Untitled.ipynb')
+            cm.get(nb_name)
 
         # Test that renaming outside of the root fails.
         with assertRaisesHTTPError(self, 404):
-            cm.rename_file('../foo', '../bar')
+            cm.rename('../foo', '../bar')
 
         # Test that renaming something to itself fails.
         with assertRaisesHTTPError(self, 409):
-            cm.rename_file('new_name.ipynb', 'new_name.ipynb')
+            cm.rename('new_name.ipynb', 'new_name.ipynb')
 
-        # Test that attempting to rename something twice fails.
-        with assertRaisesHTTPError(self, 409):
-            cm.rename_files(
-                old_paths=['new_name.ipynb', 'new_name.ipynb'],
-                new_paths=['new_name_2.ipynb', 'new_name_3.ipynb'],
-            )
+        # Test that renaming a non-existent file fails.
+        with self.assertRaisesHTTPError(self, 409):
+            cm.rename('non_existent.ipynb', 'some_name.ipynb')
 
-        # Test that trying to rename two different things as the same fails.
-        nb, nb_name, nb_path = self.new_notebook()
-        assert cm.get(nb_path)['name'] == 'Untitled.ipynb'
-        with assertRaisesHTTPError(self, 409):
-            cm.rename_files(
-                old_paths=['new_name.ipynb', 'Untitled.ipynb'],
-                new_paths=['new_name_2.ipynb', 'new_name_2.ipynb'],
-            )
-
-    def test_move_file(self):
-        cm = self.contents_manager
-        nb, nb_name, nb_path = self.new_notebook()
-        nb_model = cm.get(nb_path)
-        folder_model = cm.new_untitled(type='directory')
-        nb_destination = 'Untitled Folder/Untitled.ipynb'
-        assert nb_model['name'] == 'Untitled.ipynb'
-        assert nb_model['path'] == 'Untitled.ipynb'
-        assert folder_model['name'] == 'Untitled Folder'
-        assert folder_model['path'] == 'Untitled Folder'
-
-        # A rename of the file into another directory.
-        renamed = cm.rename_file('Untitled.ipynb', nb_destination)
-        from pdb import set_trace; set_trace()
-        assert renamed == 1
+        # Now test moving a file.
+        self.make_dir('My Folder')
+        nb_destination = 'My Folder/new_name.ipynb'
+        cm.rename_file('new_name.ipynb', nb_destination)
 
         updated_notebook_model = cm.get(nb_destination)
-        assert updated_notebook_model['name'] == 'Untitled.ipynb'
+        assert updated_notebook_model['name'] == 'new_name.ipynb'
         assert updated_notebook_model['path'] == nb_destination
 
         # The old file name should no longer be found.
         with assertRaisesHTTPError(self, 404):
-            cm.get('Untitled.ipynb')
+            cm.get('new_name.ipynb')
 
     def test_rename_directory(self):
         """
@@ -312,50 +285,39 @@ class PostgresContentsManagerTestCase(TestContentsManager):
     def test_move_empty_directory(self):
         cm = self.contents_manager
 
-        parent_folder_model = cm.new_untitled(type='directory')
-        child_folder_model = cm.new_untitled(type='directory')
-        assert parent_folder_model['name'] == 'Untitled Folder'
-        assert parent_folder_model['path'] == 'Untitled Folder'
-        assert child_folder_model['name'] == 'Untitled Folder 1'
-        assert child_folder_model['path'] == 'Untitled Folder 1'
+        self.make_dir('Parent Folder')
+        self.make_dir('Child Folder')
 
         # A rename moving one folder into the other.
-        child_folder_destination = 'Untitled Folder/Untitled Folder 1'
-        renamed = cm.rename_file('Untitled Folder 1', child_folder_destination)
-        assert renamed == 1
+        child_folder_destination = 'Parent Folder/Child Folder'
+        cm.rename_file('Child Folder', child_folder_destination)
 
-        updated_parent_model = cm.get('Untitled Folder')
-        assert updated_parent_model['path'] == 'Untitled Folder'
+        updated_parent_model = cm.get('Parent Folder')
+        assert updated_parent_model['path'] == 'Parent Folder'
         assert len(updated_parent_model['content']) == 1
 
         with assertRaisesHTTPError(self, 404):
             # Should raise a 404 because the contents manager should not be
             # able to find a folder with this path.
-            cm.get('Untitled Folder 1')
+            cm.get('Child Folder')
 
         # Confirm that the child folder has moved into the parent folder.
         updated_child_model = cm.get(child_folder_destination)
-        assert updated_child_model['name'] == 'Untitled Folder 1'
-        assert (
-            updated_child_model['path'] == child_folder_destination
-        )
+        assert updated_child_model['name'] == 'Child Folder'
+        assert updated_child_model['path'] == child_folder_destination
 
         # Test moving it back up.
-        renamed = cm.rename_file(
-            updated_child_model['path'],
-            'Untitled Folder 1',
-        )
-        assert renamed == 1
+        cm.rename_file('Parent Folder/Child Folder', 'Child Folder')
 
-        updated_parent_model = cm.get('Untitled Folder')
+        updated_parent_model = cm.get('Parent Folder')
         assert len(updated_parent_model['content']) == 0
 
         with assertRaisesHTTPError(self, 404):
-            cm.get('Untitled Folder/Untitled Folder 1')
+            cm.get('Parent Folder/Child Folder')
 
-        updated_child_model = cm.get('Untitled Folder 1')
-        assert updated_child_model['name'] == 'Untitled Folder 1'
-        assert updated_child_model['path'] == 'Untitled Folder 1'
+        updated_child_model = cm.get('Child Folder')
+        assert updated_child_model['name'] == 'Child Folder'
+        assert updated_child_model['path'] == 'Child Folder'
 
     def test_move_populated_directory(self):
         cm = self.contents_manager
@@ -373,8 +335,7 @@ class PostgresContentsManagerTestCase(TestContentsManager):
                 self.make_dir(dir_)
 
         # Move the populated directory over to "biz".
-        renamed = cm.rename_file('foo/bar/populated_dir', 'biz/populated_dir')
-        assert renamed == 1
+        cm.rename_file('foo/bar/populated_dir', 'biz/populated_dir')
 
         bar_model = cm.get('foo/bar')
         assert len(bar_model['content']) == 0
@@ -409,65 +370,6 @@ class PostgresContentsManagerTestCase(TestContentsManager):
             'populated_dir/populated_sub_dir/empty_dir'
         )
         assert len(empty_dir_model['content']) == 0
-
-    def test_move_multiple_objects(self):
-        cm = self.contents_manager
-        nb_1, nb_name_1, nb_path_1 = self.new_notebook()
-        nb_2, nb_name_2, nb_path_2 = self.new_notebook()
-        nb_model_1 = cm.get(nb_path_1)
-        nb_model_2 = cm.get(nb_path_2)
-        folder_model_1 = cm.new_untitled(type='directory')
-        folder_model_2 = cm.new_untitled(type='directory')
-        folder_path_1 = folder_model_1['path']
-        folder_path_2 = folder_model_2['path']
-
-        assert nb_model_1['path'] == 'Untitled.ipynb'
-        assert nb_model_2['path'] == 'Untitled1.ipynb'
-        assert folder_path_1 == 'Untitled Folder'
-        assert folder_path_2 == 'Untitled Folder 1'
-
-        # First test that if there is a single bad path given then none of the
-        # paths change.
-        old_api_paths = [nb_path_1, nb_path_2, folder_path_2]
-        new_api_paths = [
-            'Badpath/Untitled.ipynb',
-            'Untitled Folder/Untitled1.ipynb',
-            'Untitled Folder/Untitled Folder 1',
-        ]
-
-        with assertRaisesHTTPError(self, 500):
-            renamed = cm.rename_files(old_api_paths, new_api_paths)
-
-        # Nothing should have changed.
-        assert cm.get(nb_path_1)['path'] == 'Untitled.ipynb'
-        assert cm.get(nb_path_2)['path'] == 'Untitled1.ipynb'
-        assert cm.get(folder_path_2)['path'] == 'Untitled Folder 1'
-
-        # Now test a successful change of all three.
-        old_api_paths = [nb_path_1, nb_path_2, folder_path_2]
-        new_api_paths = [
-            'Untitled Folder/Untitled.ipynb',
-            'Untitled Folder/Untitled1.ipynb',
-            'Untitled Folder/Untitled Folder 1',
-        ]
-
-        # Rename both files and one of the directories into the other directory
-        # all at once.
-        renamed = cm.rename_files(old_api_paths, new_api_paths)
-        assert renamed == 3
-
-        updated_folder_model_1 = cm.get(folder_path_1)
-        assert len(updated_folder_model_1['content']) == 3
-
-        for new_path in new_api_paths:
-            updated_model = cm.get(new_path)
-            assert updated_model['path'] == new_path
-            assert updated_model['name'] == new_path.split('/')[-1]
-
-        # The old file name should no longer be found.
-        for old_path in old_api_paths:
-            with assertRaisesHTTPError(self, 404):
-                cm.get(old_path)
 
     def test_max_file_size(self):
 
