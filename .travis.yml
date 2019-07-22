@@ -11,8 +11,11 @@ env:
   - FLAKE8=true NB_VERSION=5
   - NOTEST=true NB_VERSION=5
 
+services:
+  - postgresql
+
 addons:
-  postgresql: "9.3"
+  postgresql: "9.5"
 
 install:
   - pip install tox
