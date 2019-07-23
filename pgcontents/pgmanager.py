@@ -18,10 +18,11 @@ PostgreSQL implementation of IPython/Jupyter ContentsManager API.
 from __future__ import unicode_literals
 from itertools import chain
 from tornado import web
+from traitlets import default
 
 from .api_utils import (
-    base_model,
     base_directory_model,
+    base_model,
     from_b64,
     outside_root_to_404,
     reads_base64,
@@ -57,7 +58,6 @@ from .query import (
     save_file,
 )
 from .utils.ipycompat import Bool, ContentsManager, from_dict
-from traitlets import default
 
 
 class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
@@ -381,8 +381,8 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
         """
         Rename object from old_path to path.
 
-        NOTE: This method is unfortunately named on the base class.  It
-        actually moves a file or a directory.
+        NOTE: This method is unfortunately named on the base class. It actually
+              moves files and directories as well.
         """
         with self.engine.begin() as db:
             try:
@@ -391,11 +391,23 @@ class PostgresContentsManager(PostgresManagerMixin, ContentsManager):
                 elif self.dir_exists(old_path):
                     rename_directory(db, self.user_id, old_path, path)
                 else:
-                    self.no_such_entity(path)
+                    self.no_such_entity(old_path)
             except (FileExists, DirectoryExists):
                 self.already_exists(path)
             except RenameRoot as e:
                 self.do_409(str(e))
+            except (web.HTTPError, PathOutsideRoot):
+                raise
+            except Exception as e:
+                self.log.exception(
+                    'Error renaming file/directory from %s to %s',
+                    old_path,
+                    path,
+                )
+                self.do_500(
+                    u'Unexpected error while renaming %s: %s'
+                    % (old_path, e)
+                )
 
     def _delete_non_directory(self, path):
         with self.engine.begin() as db:
