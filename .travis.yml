@@ -3,7 +3,7 @@ sudo: false
 
 python:
   - "2.7"
-  - "3.4"
+  - "3.5"
   - "3.6"
 env:
   - NB_VERSION=4
@@ -22,7 +22,7 @@ install:
 
 script:
   - if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-notebook$NB_VERSION; fi
-  - if [[ $TRAVIS_PYTHON_VERSION = '3.4' ]]; then tox -e py34-notebook$NB_VERSION; fi
+  - if [[ $TRAVIS_PYTHON_VERSION = '3.5' ]]; then tox -e py35-notebook$NB_VERSION; fi
   - if [[ $TRAVIS_PYTHON_VERSION = '3.6' ]]; then tox -e py36-notebook$NB_VERSION; fi
   - if [[ $FLAKE8 = 'true' ]]; then tox -e notest; fi
   - if [[ $NOTEST = 'true' ]]; then tox -e flake8; fi
