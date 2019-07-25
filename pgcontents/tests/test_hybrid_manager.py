@@ -83,6 +83,9 @@ class PostgresTestCase(PostgresContentsManagerTestCase):
             managers={'': self._pgmanager}
         )
 
+        self.addCleanup(self._pgmanager.engine.dispose)
+        self.addCleanup(self._pgmanager.checkpoints.engine.dispose)
+
     # HybridContentsManager is not expected to dispatch calls to get_file_id
     # because PostgresContentsManager is the only contents manager that
     # implements it.

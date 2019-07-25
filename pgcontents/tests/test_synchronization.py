@@ -201,6 +201,12 @@ class TestGenerateNotebooks(TestCase):
     def tearDown(self):
         clear_test_db()
 
+    @staticmethod
+    def cleanup_pgcontents_managers(managers):
+        for manager in managers:
+            manager.engine.dispose()
+            manager.checkpoints.engine.dispose()
+
     def populate_users(self, user_ids):
         """
         Create a `PostgresContentsManager` and notebooks for each user.
@@ -252,6 +258,10 @@ class TestGenerateNotebooks(TestCase):
                     'test_generate_files1',
                     'test_generate_files2']
         (managers, paths) = self.populate_users(user_ids)
+
+        # Dispose of all engines created during this test to prevent leaked
+        # database connections.
+        self.addCleanup(self.cleanup_pgcontents_managers, managers.values())
 
         # Since the bad notebook is saved last, it will be hit only when no
         # max_dt is specified.
@@ -339,6 +349,10 @@ class TestGenerateNotebooks(TestCase):
                     'test_generate_checkpoints1',
                     'test_generate_checkpoints2']
         (managers, paths) = self.populate_users(user_ids)
+
+        # Dispose of all engines created during this test to prevent leaked
+        # database connections.
+        self.addCleanup(self.cleanup_pgcontents_managers, managers.values())
 
         def update_content(user_id, path, text):
             """
