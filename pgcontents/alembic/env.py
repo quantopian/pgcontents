@@ -74,6 +74,7 @@ def run_migrations_online():
             context.run_migrations()
     finally:
         connection.close()
+        engine.dispose()
 
 
 if context.is_offline_mode():

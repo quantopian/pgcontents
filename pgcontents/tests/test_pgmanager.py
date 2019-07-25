@@ -54,6 +54,23 @@ class PostgresContentsManagerTestCase(TestContentsManager):
         self.contents_manager.ensure_user()
         self.contents_manager.ensure_root_directory()
 
+        # We need to dispose of any engines created during tests or else the
+        # engine's QueuePool will leak connections even once this suite has
+        # finished running. Then as other test suites start to run, the number
+        # of connections will eventually creep up to the maximum number that
+        # postgres allows. For reference, see the SQLAlchemy docs here:
+        # https://docs.sqlalchemy.org/en/13/core/connections.html#engine-disposal
+        #
+        # This pattern should be repeated in any test class that creates a
+        # PostgresContentsManager or a PostgresCheckpoints object (note that
+        # even though the checkpoints manager lives on the contents manager it
+        # still creates its own engine). An alternative solution to calling
+        # dispose here would be to have these classes create engines with a
+        # NullPool when testing, but that 1) adds more latency, and 2) adds
+        # test-specific behavior to the classes themselves.
+        self.addCleanup(self.contents_manager.engine.dispose)
+        self.addCleanup(self.contents_manager.checkpoints.engine.dispose)
+
     def tearDown(self):
         clear_test_db()
 

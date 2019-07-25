@@ -271,6 +271,10 @@ class PostgresContentsAPITest(_APITestBase):
         self.pg_manager.ensure_root_directory()
         super(PostgresContentsAPITest, self).setUp()
 
+        self.addCleanup(self.pg_manager.engine.dispose)
+        if hasattr(self.pg_manager.checkpoints, 'engine'):
+            self.addCleanup(self.pg_manager.checkpoints.engine.dispose)
+
     def tearDown(self):
         super(PostgresContentsAPITest, self).tearDown()
         clear_test_db()
@@ -448,6 +452,7 @@ class PostgresCheckpointsAPITest(_APITestBase):
     def setUp(self):
         super(PostgresCheckpointsAPITest, self).setUp()
         self.checkpoints.ensure_user()
+        self.addCleanup(self.checkpoints.engine.dispose)
 
     def tearDown(self):
         self.checkpoints.purge_db()
