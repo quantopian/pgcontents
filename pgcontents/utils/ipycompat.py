@@ -1,9 +1,8 @@
-"""
-Utilities for managing compat between notebook versions.
-"""
+"""Utilities for managing compat between notebook versions."""
 import notebook
-if notebook.version_info[0] >= 6:  # noqa
-    raise ImportError("Jupyter Notebook versions 6 and up are not supported.")
+
+#  if notebook.version_info[0] >= 6:  # noqa
+#  raise ImportError("Jupyter Notebook versions 6 and up are not supported.")
 
 from traitlets.config import Config
 from notebook.services.contents.checkpoints import (
@@ -11,16 +10,10 @@ from notebook.services.contents.checkpoints import (
     GenericCheckpointsMixin,
 )
 from notebook.services.contents.filemanager import FileContentsManager
-from notebook.services.contents.filecheckpoints import (
-    GenericFileCheckpoints
-)
+from notebook.services.contents.filecheckpoints import (GenericFileCheckpoints)
 from notebook.services.contents.manager import ContentsManager
-from notebook.services.contents.tests.test_manager import (
-    TestContentsManager
-)
-from notebook.services.contents.tests.test_contents_api import (
-    APITest
-)
+from notebook.services.contents.tests.test_manager import (TestContentsManager)
+from notebook.services.contents.tests.test_contents_api import (APITest)
 from notebook.tests.launchnotebook import assert_http_error
 from notebook.utils import to_os_path
 from nbformat import from_dict, reads, writes
@@ -40,7 +33,6 @@ from traitlets import (
     HasTraits,
     Unicode,
 )
-
 
 __all__ = [
     'APITest',
