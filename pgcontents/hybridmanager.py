@@ -1,6 +1,4 @@
-"""
-Multi-backend ContentsManager.
-"""
+"""Multi-backend ContentsManager."""
 from __future__ import unicode_literals
 
 from six import iteritems
@@ -16,8 +14,7 @@ from .utils.ipycompat import ContentsManager, Dict
 
 @outside_root_to_404
 def _resolve_path(path, manager_dict):
-    """
-    Resolve a path based on a dictionary of manager prefixes.
+    """Resolve a path based on a dictionary of manager prefixes.
 
     Returns a triple of (prefix, manager, manager_relative_path).
     """
@@ -35,15 +32,12 @@ def _resolve_path(path, manager_dict):
         return '', mgr, path
 
     raise HTTPError(
-        404,
-        "Couldn't resolve path [{path}] and "
-        "no root manager supplied!".format(path=path)
-    )
+        404, "Couldn't resolve path [{path}] and "
+        "no root manager supplied!".format(path=path))
 
 
 def _get_arg(argname, args, kwargs):
-    """
-    Get an argument, either from kwargs or from the first entry in args.
+    """Get an argument, either from kwargs or from the first entry in args.
     Raises a TypeError if argname not in kwargs and len(args) == 0.
 
     Mutates kwargs in place if the value is found in kwargs.
@@ -59,9 +53,7 @@ def _get_arg(argname, args, kwargs):
 
 
 def _apply_prefix(prefix, model):
-    """
-    Prefix all path entries in model with the given prefix.
-    """
+    """Prefix all path entries in model with the given prefix."""
     if not isinstance(model, dict):
         raise TypeError("Expected dict for model, got %s" % type(model))
 
@@ -84,9 +76,7 @@ def _apply_prefix(prefix, model):
 
 # Dispatch decorators.
 def path_dispatch1(mname, returns_model):
-    """
-    Decorator for methods that accept path as a first argument.
-    """
+    """Decorator for methods that accept path as a first argument."""
     def _wrapper(self, *args, **kwargs):
         path, args = _get_arg('path', args, kwargs)
         prefix, mgr, mgr_path = _resolve_path(path, self.managers)
@@ -100,9 +90,7 @@ def path_dispatch1(mname, returns_model):
 
 
 def path_dispatch2(mname, first_argname, returns_model):
-    """
-    Decorator for methods that accept path as a second argument.
-    """
+    """Decorator for methods that accept path as a second argument."""
     def _wrapper(self, *args, **kwargs):
         other, args = _get_arg(first_argname, args, kwargs)
         path, args = _get_arg('path', args, kwargs)
@@ -112,14 +100,13 @@ def path_dispatch2(mname, first_argname, returns_model):
             return _apply_prefix(prefix, result)
         else:
             return result
+
     return _wrapper
 
 
 def path_dispatch_kwarg(mname, path_default, returns_model):
-    """
-    Parameterized decorator for methods that accept path as a second
-    argument.
-    """
+    """Parameterized decorator for methods that accept path as a second
+    argument."""
     def _wrapper(self, path=path_default, **kwargs):
         prefix, mgr, mgr_path = _resolve_path(path, self.managers)
         result = getattr(mgr, mname)(path=mgr_path, **kwargs)
@@ -127,19 +114,18 @@ def path_dispatch_kwarg(mname, path_default, returns_model):
             return _apply_prefix(prefix, result)
         else:
             return result
+
     return _wrapper
 
 
 def path_dispatch_old_new(mname, returns_model):
-    """
-    Decorator for methods accepting old_path and new_path.
-    """
+    """Decorator for methods accepting old_path and new_path."""
     def _wrapper(self, old_path, new_path, *args, **kwargs):
         old_prefix, old_mgr, old_mgr_path = _resolve_path(
-            old_path, self.managers
-        )
+            old_path, self.managers)
         new_prefix, new_mgr, new_mgr_path = _resolve_path(
-            new_path, self.managers,
+            new_path,
+            self.managers,
         )
         if old_mgr is not new_mgr:
             # TODO: Consider supporting this via get+delete+save.
@@ -148,59 +134,45 @@ def path_dispatch_old_new(mname, returns_model):
                 "Can't move files between backends ({old} -> {new})".format(
                     old=old_path,
                     new=new_path,
-                )
-            )
+                ))
         assert new_prefix == old_prefix
-        result = getattr(new_mgr, mname)(
-            old_mgr_path,
-            new_mgr_path,
-            *args,
-            **kwargs
-        )
+        result = getattr(new_mgr, mname)(old_mgr_path, new_mgr_path, *args,
+                                         **kwargs)
         if returns_model and new_prefix:
             return _apply_prefix(new_prefix, result)
         else:
             return result
+
     return _wrapper
 
 
 class HybridContentsManager(ContentsManager):
-    """
-    ContentsManager subclass that delegates specific subdirectories to other
-    ContentsManager/Checkpoints pairs.
-    """
+    """ContentsManager subclass that delegates specific subdirectories to other
+    ContentsManager/Checkpoints pairs."""
 
     manager_classes = Dict(
-        config=True,
-        help=("Dict mapping root dir -> ContentsManager class.")
-    )
+        config=True, help=("Dict mapping root dir -> ContentsManager class."))
 
     manager_kwargs = Dict(
         config=True,
-        help=("Dict of dicts mapping root dir -> kwargs for manager.")
-    )
+        help=("Dict of dicts mapping root dir -> kwargs for manager."))
 
     managers = Dict(help=("Dict mapping root dir -> ContentsManager."))
 
     def _managers_default(self):
         return {
-            key: mgr_cls(
-                parent=self,
-                log=self.log,
-                **self.manager_kwargs.get(key, {})
-            )
+            key: mgr_cls(parent=self,
+                         log=self.log,
+                         **self.manager_kwargs.get(key, {}))
             for key, mgr_cls in iteritems(self.manager_classes)
         }
 
     def _managers_changed(self, name, old, new):
-        """
-        Strip slashes from directories before updating.
-        """
+        """Strip slashes from directories before updating."""
         for key in new:
             if '/' in key:
                 raise ValueError(
-                    "Expected directory names w/o slashes.  Got [%s]" % key
-                )
+                    "Expected directory names w/o slashes.  Got [%s]" % key)
             self.managers = {k.strip('/'): v for k, v in new.items()}
 
     @property
@@ -208,11 +180,7 @@ class HybridContentsManager(ContentsManager):
         return self.managers.get('')
 
     def _extra_root_dirs(self):
-        return [
-            base_directory_model(path)
-            for path in self.managers
-            if path
-        ]
+        return [base_directory_model(path) for path in self.managers if path]
 
     is_hidden = path_dispatch1('is_hidden', False)
     dir_exists = path_dispatch1('dir_exists', False)
@@ -220,16 +188,13 @@ class HybridContentsManager(ContentsManager):
     exists = path_dispatch1('exists', False)
 
     save = path_dispatch2('save', 'model', True)
-    rename = path_dispatch_old_new('rename', False)
 
     __get = path_dispatch1('get', True)
     __delete = path_dispatch1('delete', False)
 
     @outside_root_to_404
     def get(self, path, content=True, type=None, format=None):
-        """
-        Special case handling for listing root dir.
-        """
+        """Special case handling for listing root dir."""
         path = normalize_api_path(path)
         if path:
             return self.__get(path, content=content, type=type, format=format)
@@ -257,16 +222,16 @@ class HybridContentsManager(ContentsManager):
 
     @outside_root_to_404
     def delete(self, path):
-        """
-        Ensure that roots of our managers can't be deleted.  This should be
-        enforced by https://github.com/ipython/ipython/pull/8168, but rogue
+        """Ensure that roots of our managers can't be deleted.
+
+        This should be enforced by
+        https://github.com/ipython/ipython/pull/8168, but rogue
         implementations might override this behavior.
         """
         path = normalize_api_path(path)
         if path in self.managers:
-            raise HTTPError(
-                400, "Can't delete root of %s" % self.managers[path]
-            )
+            raise HTTPError(400,
+                            "Can't delete root of %s" % self.managers[path])
         return self.__delete(path)
 
     create_checkpoint = path_dispatch1('create_checkpoint', False)
@@ -281,3 +246,44 @@ class HybridContentsManager(ContentsManager):
         'checkpoint_id',
         False,
     )
+
+    # CODE WRITTEN BY VIADUCT
+    @outside_root_to_404
+    def rename(self, old_path, new_path):
+        """Ensure that roots of our managers can't be moved or renamed.
+
+        This a precaution against rogue behavior
+        """
+        old_prefix, old_mgr, old_mgr_path = _resolve_path(
+            old_path, self.managers)
+
+        new_prefix, new_mgr, new_mgr_path = _resolve_path(
+            new_path,
+            self.managers,
+        )
+        # do not allow moving/renaming the root
+        if old_mgr_path in self.managers or new_mgr_path in self.managers:
+            raise HTTPError(
+                400, "Can't rename or move root directories ({old} -> {new})".
+                format(
+                    old=old_path,
+                    new=new_path,
+                ))
+
+        if old_mgr is not new_mgr:
+
+            # get the model from the old_mgr
+            model = old_mgr.get(old_mgr_path)
+
+            # save the model with the new_mgr
+            new_mgr.save(model, new_mgr_path)
+
+            # delete the model with the old_mgr using the protected delete
+            self.delete(old_mgr_path)
+
+            # Return
+            return None
+        # Else we are moving within a single ContentManager
+        assert new_prefix == old_prefix
+
+        return new_mgr.rename(old_mgr_path, new_mgr_path)
