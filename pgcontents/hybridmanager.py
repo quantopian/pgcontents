@@ -279,9 +279,10 @@ class HybridContentsManager(ContentsManager):
             new_mgr.save(model, new_mgr_path)
 
             # delete the model with the old_mgr using the protected delete
-            self.delete(old_mgr_path)
+            # pass in the full path because self.delete will normalize the path again
+            self.delete(old_path)
 
-            # Return
+            # Return nothing
             return None
         # Else we are moving within a single ContentManager
         assert new_prefix == old_prefix
