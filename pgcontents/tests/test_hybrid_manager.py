@@ -17,21 +17,15 @@ from six import (
     itervalues,
 )
 from unittest import TestCase
+from unittest.mock import Mock
+
 from IPython.utils.tempdir import TemporaryDirectory
 
 from pgcontents.hybridmanager import HybridContentsManager
-from pgcontents.pgmanager import PostgresContentsManager
 
-from .test_pgmanager import PostgresContentsManagerTestCase
-from .utils import (
-    assertRaisesHTTPError,
-    make_fernet,
-    remigrate_test_schema,
-    TEST_DB_URL,
-)
+from .utils import assertRaisesHTTPError
+
 from ..utils.ipycompat import APITest, FileContentsManager, TestContentsManager
-
-setup_module = remigrate_test_schema
 
 
 def _make_dir(contents_manager, api_path):
@@ -272,18 +266,53 @@ class MultiRootTestCase(TestCase):
         with assertRaisesHTTPError(self, 400):
             cm.rename('', 'A')
 
-    def test_cant_rename_across_managers(self):
+    def test_rename_submanager_calls(self):
         cm = self.contents_manager
         cm.new_untitled(ext='.ipynb')
 
-        with assertRaisesHTTPError(self, 400):
-            cm.rename('Untitled.ipynb', 'A/Untitled.ipynb')
+        old_path = 'Untitled.ipynb'
+        new_path = 'A/test/Untitled.ipynb'
+
+        old_manager = self._managers['']
+        new_manager = self._managers['A']
+
+        # Configure Mocks
+        old_manager.delete = Mock()
+        new_manager.save = Mock()
+        old_manager.get = Mock()
+
+        # Get test data
+        old_model = old_manager.get(old_path)
+        new_relative_path = 'test/Untitled.ipynb'
+
+        # Make calls
+        cm.rename(old_path, new_path)
+
+        # Run tests
+        old_manager.delete.assert_called_with(old_path)
+        old_manager.get.assert_called_with(old_path)
+        new_manager.save.assert_called_with(old_model, new_relative_path)
+
+    def test_can_rename_across_managers(self):
+        cm = self.contents_manager
+        cm.new_untitled(ext='.ipynb')
+
+        old_path = 'Untitled.ipynb'
+        new_path = 'A/Untitled.ipynb'
+
+        cm.rename(old_path, new_path)
+
+        with assertRaisesHTTPError(self, 404):
+            cm.get(old_path)
+
+        model2 = cm.get(new_path)
+
+        self.assertIn('path', model2)
 
     def tearDown(self):
         for dir_ in itervalues(self.temp_dirs):
             dir_.cleanup()
 
 
-del PostgresContentsManagerTestCase
 del TestContentsManager
 del APITest
