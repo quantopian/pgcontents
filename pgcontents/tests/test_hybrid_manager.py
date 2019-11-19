@@ -27,6 +27,8 @@ from .utils import assertRaisesHTTPError
 
 from ..utils.ipycompat import APITest, FileContentsManager, TestContentsManager
 
+TEST_FILE_NAME = "Untitled.ipynb"
+
 
 def _make_dir(contents_manager, api_path):
     """
@@ -77,7 +79,6 @@ class MultiRootTestCase(TestCase):
     def test_get(self):
         cm = self.contents_manager
 
-        untitled_nb = 'Untitled.ipynb'
         untitled_txt = 'untitled.txt'
         for prefix, real_dir in iteritems(self.temp_dir_names):
             # Create a notebook
@@ -85,9 +86,9 @@ class MultiRootTestCase(TestCase):
             name = model['name']
             path = model['path']
 
-            self.assertEqual(name, untitled_nb)
-            self.assertEqual(path, pjoin(prefix, untitled_nb))
-            self.assertTrue(exists(osjoin(real_dir, untitled_nb)))
+            self.assertEqual(name, TEST_FILE_NAME)
+            self.assertEqual(path, pjoin(prefix, TEST_FILE_NAME))
+            self.assertTrue(exists(osjoin(real_dir, TEST_FILE_NAME)))
 
             # Check that we can 'get' on the notebook we just created
             model2 = cm.get(path)
@@ -131,15 +132,15 @@ class MultiRootTestCase(TestCase):
             prefixed_sub_dir = pjoin(prefix, sub_dir)
 
             cm.new_untitled(path=prefixed_sub_dir, ext='.ipynb')
-            self.assertTrue(exists(osjoin(real_dir, sub_dir, untitled_nb)))
+            self.assertTrue(exists(osjoin(real_dir, sub_dir, TEST_FILE_NAME)))
 
-            sub_dir_nbpath = pjoin(prefixed_sub_dir, untitled_nb)
+            sub_dir_nbpath = pjoin(prefixed_sub_dir, TEST_FILE_NAME)
             model2 = cm.get(sub_dir_nbpath)
             self.assertDictContainsSubset(
                 {
                     'type': 'notebook',
                     'format': 'json',
-                    'name': untitled_nb,
+                    'name': TEST_FILE_NAME,
                     'path': sub_dir_nbpath,
                 },
                 model2,
@@ -239,7 +240,7 @@ class MultiRootTestCase(TestCase):
         self.assertIsInstance(content, list)
         # Two new files, plus the sub-manager directories.
         dirs = set(self.temp_dir_names)
-        files = {'Untitled.ipynb', 'untitled.txt'}
+        files = {TEST_FILE_NAME, 'untitled.txt'}
         paths = dirs | files
         self.assertEqual(len(content), 4)
         for entry in content:
@@ -249,7 +250,7 @@ class MultiRootTestCase(TestCase):
                 self.fail("Unexpected entry path %s" % entry)
             if path in dirs:
                 self.assertEqual(entry['type'], 'directory')
-            elif path == 'Untitled.ipynb':
+            elif path == TEST_FILE_NAME:
                 self.assertEqual(entry['type'], 'notebook')
             else:
                 self.assertEqual(entry['type'], 'file')
@@ -270,7 +271,6 @@ class MultiRootTestCase(TestCase):
         cm = self.contents_manager
         cm.new_untitled(ext='.ipynb')
 
-        old_path = 'Untitled.ipynb'
         new_path = 'A/test/Untitled.ipynb'
 
         old_manager = self._managers['']
@@ -282,28 +282,27 @@ class MultiRootTestCase(TestCase):
         old_manager.get = Mock()
 
         # Get test data
-        old_model = old_manager.get(old_path)
+        old_model = old_manager.get(TEST_FILE_NAME)
         new_relative_path = 'test/Untitled.ipynb'
 
         # Make calls
-        cm.rename(old_path, new_path)
+        cm.rename(TEST_FILE_NAME, new_path)
 
         # Run tests
-        old_manager.delete.assert_called_with(old_path)
-        old_manager.get.assert_called_with(old_path)
+        old_manager.delete.assert_called_with(TEST_FILE_NAME)
+        old_manager.get.assert_called_with(TEST_FILE_NAME)
         new_manager.save.assert_called_with(old_model, new_relative_path)
 
     def test_can_rename_across_managers(self):
         cm = self.contents_manager
         cm.new_untitled(ext='.ipynb')
 
-        old_path = 'Untitled.ipynb'
         new_path = 'A/Untitled.ipynb'
 
-        cm.rename(old_path, new_path)
+        cm.rename(TEST_FILE_NAME, new_path)
 
         with assertRaisesHTTPError(self, 404):
-            cm.get(old_path)
+            cm.get(TEST_FILE_NAME)
 
         model2 = cm.get(new_path)
 
