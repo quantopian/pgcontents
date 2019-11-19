@@ -23,9 +23,9 @@ from IPython.utils.tempdir import TemporaryDirectory
 
 from pgcontents.hybridmanager import HybridContentsManager
 
-from .utils import assertRaisesHTTPError
+from .testing_utils import assertRaisesHTTPError
 
-from ..utils.ipycompat import APITest, FileContentsManager, TestContentsManager
+from ..ipycompat import APITest, FileContentsManager, TestContentsManager
 
 TEST_FILE_NAME = "Untitled.ipynb"
 

@@ -9,7 +9,7 @@ from .api_utils import (
     normalize_api_path,
     outside_root_to_404,
 )
-from .utils.ipycompat import ContentsManager, Dict
+from .ipycompat import ContentsManager, Dict
 
 
 @outside_root_to_404
