@@ -3,7 +3,6 @@ from setuptools import setup, find_packages
 from os.path import join, dirname, abspath
 import sys
 
-
 long_description = ''
 
 if 'upload' in sys.argv or '--long-description' in sys.argv:
@@ -22,13 +21,13 @@ def main():
     test_reqs = read_requirements('requirements_test.txt')
 
     setup(
-        name='pgcontents',
+        name='hybrid-content-manager',
         version='0.6',
-        description="A Postgres-backed ContentsManager for IPython/Jupyter.",
+        description="Hybrid Content Manager",
         long_description=long_description,
-        author="Scott Sanderson",
-        author_email="ssanderson@quantopian.com",
-        packages=find_packages(include='pgcontents.*'),
+        author="Viaduct AI",
+        author_email="engineering@viaduct.ai",
+        packages=find_packages(include='hybrid_content_manager.*'),
         license='Apache 2.0',
         include_package_data=True,
         zip_safe=False,
@@ -40,8 +39,8 @@ def main():
             'Natural Language :: English',
             'Operating System :: OS Independent',
             'Programming Language :: Python :: 2.7',
-            'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: 3.6',
+            'Programming Language :: Python :: 3.7',
             'Programming Language :: Python',
             'Topic :: Database',
         ],
@@ -49,9 +48,6 @@ def main():
         extras_require={
             'test': test_reqs,
         },
-        scripts=[
-            'bin/pgcontents',
-        ],
     )
 
 

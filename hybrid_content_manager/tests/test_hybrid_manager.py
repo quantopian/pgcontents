@@ -17,11 +17,11 @@ from six import (
     itervalues,
 )
 from unittest import TestCase
-from unittest.mock import Mock
+from mock import Mock
 
 from IPython.utils.tempdir import TemporaryDirectory
 
-from pgcontents.hybridmanager import HybridContentsManager
+from hybrid_content_manager.hybridmanager import HybridContentsManager
 
 from .testing_utils import assertRaisesHTTPError
 
