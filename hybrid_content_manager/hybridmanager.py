@@ -161,6 +161,10 @@ class HybridContentsManager(ContentsManager):
         config=True,
         help=("Dict of dicts mapping root dir -> kwargs for manager."))
 
+    path_validator = Dict(
+        config=True,
+        help=("Dict mapping root dir -> path validation function"))
+
     managers = Dict(help=("Dict mapping root dir -> ContentsManager."))
 
     def _managers_default(self):
@@ -186,13 +190,22 @@ class HybridContentsManager(ContentsManager):
     def _extra_root_dirs(self):
         return [base_directory_model(path) for path in self.managers if path]
 
+    def _validate_path(self, root, path):
+        validator = self.path_validator.get(root, lambda path: True)
+
+        path_is_valid = validator(path)
+
+        assert type(
+            path_is_valid) is bool, 'Path validator does not return a boolean.'
+
+        return path_is_valid
+
     is_hidden = path_dispatch1('is_hidden', False)
     dir_exists = path_dispatch1('dir_exists', False)
     file_exists = path_dispatch_kwarg('file_exists', '', False)
     exists = path_dispatch1('exists', False)
 
-    save = path_dispatch2('save', 'model', True)
-
+    __save = path_dispatch2('save', 'model', True)
     __get = path_dispatch1('get', True)
     __delete = path_dispatch1('delete', False)
 
@@ -253,6 +266,18 @@ class HybridContentsManager(ContentsManager):
 
     # CODE WRITTEN BY VIADUCT
     @outside_root_to_404
+    def save(self, model, path):
+        prefix, mgr, mgr_path = _resolve_path(path, self.managers)
+
+        if not self._validate_path(prefix, mgr_path):
+            raise HTTPError(
+                400,
+                "The provided path_validator for the prefix '{prefix}' has flagged the path '{new_path}' as invalid."
+                .format(prefix=prefix, new_path=path))
+
+        return self.__save(model, path)
+
+    @outside_root_to_404
     def rename(self, old_path, new_path):
         """Ensure that roots of our managers can't be moved or renamed.
 
@@ -265,6 +290,13 @@ class HybridContentsManager(ContentsManager):
             new_path,
             self.managers,
         )
+
+        if not self._validate_path(new_prefix, new_mgr_path):
+            raise HTTPError(
+                400,
+                "The provided path_validator for the prefix '{prefix}' has flagged the path '{new_path}' as invalid."
+                .format(prefix=new_prefix, new_path=new_path))
+
         # do not allow moving/renaming the root
         if old_mgr_path in self.managers or new_mgr_path in self.managers:
             raise HTTPError(

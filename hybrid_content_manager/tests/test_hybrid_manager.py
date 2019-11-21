@@ -76,6 +76,11 @@ class MultiRootTestCase(TestCase):
         }
         self.contents_manager = HybridContentsManager(managers=self._managers)
 
+        self.contents_manager.path_validator = {
+            prefix: lambda s: False
+            for prefix in mgr_roots
+        }
+
     def test_get(self):
         cm = self.contents_manager
 
