@@ -77,9 +77,12 @@ class MultiRootTestCase(TestCase):
         self.contents_manager = HybridContentsManager(managers=self._managers)
 
         self.contents_manager.path_validator = {
-            prefix: lambda s: False
-            for prefix in mgr_roots
+            'A': lambda s: not s.endswith('.yaml')
         }
+        # {
+        #     prefix: lambda s: False
+        #     for prefix in mgr_roots
+        # }
 
     def test_get(self):
         cm = self.contents_manager
@@ -247,10 +250,14 @@ class MultiRootTestCase(TestCase):
         dirs = set(self.temp_dir_names)
         files = {TEST_FILE_NAME, 'untitled.txt'}
         paths = dirs | files
+
         self.assertEqual(len(content), 4)
+
         for entry in content:
             self.assertEqual(entry['path'], entry['name'])
+
             path = entry['path']
+
             if path not in paths:
                 self.fail("Unexpected entry path %s" % entry)
             if path in dirs:
@@ -312,6 +319,23 @@ class MultiRootTestCase(TestCase):
         model2 = cm.get(new_path)
 
         self.assertIn('path', model2)
+
+    def test_rename_invalid_path(self):
+        cm = self.contents_manager
+
+        cm.new_untitled(ext='.yaml')
+
+        old_path = 'Untitled.yaml'
+        new_path = 'A/Untitled.yaml'
+
+        with assertRaisesHTTPError(self, 401):
+            cm.rename(old_path, new_path)
+
+    def test_save_invalid_path(self):
+        cm = self.contents_manager
+
+        with assertRaisesHTTPError(self, 401):
+            cm.new_untitled(path='A', ext='.yaml')
 
     def tearDown(self):
         for dir_ in itervalues(self.temp_dirs):

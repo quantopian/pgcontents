@@ -190,13 +190,20 @@ class HybridContentsManager(ContentsManager):
     def _extra_root_dirs(self):
         return [base_directory_model(path) for path in self.managers if path]
 
-    def _validate_path(self, root, path):
-        validator = self.path_validator.get(root, lambda path: True)
+    def _validate_path(self, prefix, path):
+        validator = self.path_validator.get(prefix, lambda path: True)
 
         path_is_valid = validator(path)
 
-        assert type(
-            path_is_valid) is bool, 'Path validator does not return a boolean.'
+        # Ensure return type is bool
+        if type(path_is_valid) is not bool:
+            print('Path validator does not return a boolean.')
+
+        if not path_is_valid:
+            raise HTTPError(
+                401,
+                "The provided path_validator for the prefix '{prefix}' has flagged the path '{path}' as invalid."
+                .format(prefix=prefix, path=path))
 
         return path_is_valid
 
@@ -269,11 +276,7 @@ class HybridContentsManager(ContentsManager):
     def save(self, model, path):
         prefix, mgr, mgr_path = _resolve_path(path, self.managers)
 
-        if not self._validate_path(prefix, mgr_path):
-            raise HTTPError(
-                400,
-                "The provided path_validator for the prefix '{prefix}' has flagged the path '{new_path}' as invalid."
-                .format(prefix=prefix, new_path=path))
+        self._validate_path(prefix, mgr_path)
 
         return self.__save(model, path)
 
@@ -291,11 +294,7 @@ class HybridContentsManager(ContentsManager):
             self.managers,
         )
 
-        if not self._validate_path(new_prefix, new_mgr_path):
-            raise HTTPError(
-                400,
-                "The provided path_validator for the prefix '{prefix}' has flagged the path '{new_path}' as invalid."
-                .format(prefix=new_prefix, new_path=new_path))
+        self._validate_path(new_prefix, new_mgr_path)
 
         # do not allow moving/renaming the root
         if old_mgr_path in self.managers or new_mgr_path in self.managers:
