@@ -197,7 +197,10 @@ class HybridContentsManager(ContentsManager):
 
         # Ensure return type is bool
         if type(path_is_valid) is not bool:
-            print('Path validator does not return a boolean.')
+            raise HTTPError(
+                400,
+                "The provided path_validator for the prefix '{prefix}' does not return a boolean"
+                .format(prefix=prefix, path=path))
 
         if not path_is_valid:
             raise HTTPError(
@@ -294,8 +297,6 @@ class HybridContentsManager(ContentsManager):
             self.managers,
         )
 
-        self._validate_path(new_prefix, new_mgr_path)
-
         # do not allow moving/renaming the root
         if old_mgr_path in self.managers or new_mgr_path in self.managers:
             raise HTTPError(
@@ -310,8 +311,8 @@ class HybridContentsManager(ContentsManager):
             # get the model from the old_mgr
             model = old_mgr.get(old_mgr_path)
 
-            # save the model with the new_mgr
-            new_mgr.save(model, new_mgr_path)
+            # save the model
+            self.save(model, new_path)
 
             # delete the model with the old_mgr using the protected delete
             # pass in the full path because self.delete will normalize the path again

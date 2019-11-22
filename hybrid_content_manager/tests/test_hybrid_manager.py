@@ -79,10 +79,6 @@ class MultiRootTestCase(TestCase):
         self.contents_manager.path_validator = {
             'A': lambda s: not s.endswith('.yaml')
         }
-        # {
-        #     prefix: lambda s: False
-        #     for prefix in mgr_roots
-        # }
 
     def test_get(self):
         cm = self.contents_manager
@@ -286,16 +282,15 @@ class MultiRootTestCase(TestCase):
         new_path = 'A/test/Untitled.ipynb'
 
         old_manager = self._managers['']
-        new_manager = self._managers['A']
 
         # Configure Mocks
         old_manager.delete = Mock()
-        new_manager.save = Mock()
         old_manager.get = Mock()
+
+        cm.save = Mock()
 
         # Get test data
         old_model = old_manager.get(TEST_FILE_NAME)
-        new_relative_path = 'test/Untitled.ipynb'
 
         # Make calls
         cm.rename(TEST_FILE_NAME, new_path)
@@ -303,7 +298,7 @@ class MultiRootTestCase(TestCase):
         # Run tests
         old_manager.delete.assert_called_with(TEST_FILE_NAME)
         old_manager.get.assert_called_with(TEST_FILE_NAME)
-        new_manager.save.assert_called_with(old_model, new_relative_path)
+        cm.save.assert_called_with(old_model, new_path)
 
     def test_can_rename_across_managers(self):
         cm = self.contents_manager
