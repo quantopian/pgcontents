@@ -50,4 +50,5 @@ c.HybridContentsManager.path_validator = {
 
 Testing
 -------
-To run unit tests, simply cd to the root directory of the project and run the command ``tox``. This will run all unit tests for python versions 2.7, 3.6, 3.7 and jupyter notebook versions 4, 5, and 6.
+To run unit tests, simply cd to the root directory of the project and run the command ``tox``. 
+This will run all unit tests for python versions 2.7, 3.6, 3.7 and jupyter notebook versions 4, 5, and 6.
