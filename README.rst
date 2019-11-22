@@ -15,37 +15,36 @@ Usage
 -----
 The following code snippet creates a HybridContentsManager with two directories with different content managers. 
 
-```python
-c = get_config()
+.. code-block:: python
+    c = get_config()
 
-c.NotebookApp.contents_manager_class = HybridContentsManager
+    c.NotebookApp.contents_manager_class = HybridContentsManager
 
-c.HybridContentsManager.manager_classes = {
-    "": FileContentsManager,
-    "shared": S3ContentsManager
-}
+    c.HybridContentsManager.manager_classes = {
+        "": FileContentsManager,
+        "shared": S3ContentsManager
+    }
 
-# Each item will be passed to the constructor of the appropriate content manager.
-c.HybridContentsManager.manager_kwargs = {
-    # Args for root S3ContentsManager.
-    "": {
-        "root_dir": read_only_dir
-    },
-    # Args for the shared S3ContentsManager directory
-    "shared": {
-        "access_key_id": ...,
-        "secret_access_key": ...,
-        "endpoint_url":  ...,
-        "bucket": ...,
-        "prefix": ...
-    },
-}
+    # Each item will be passed to the constructor of the appropriate content manager.
+    c.HybridContentsManager.manager_kwargs = {
+        # Args for root S3ContentsManager.
+        "": {
+            "root_dir": read_only_dir
+        },
+        # Args for the shared S3ContentsManager directory
+        "shared": {
+            "access_key_id": ...,
+            "secret_access_key": ...,
+            "endpoint_url":  ...,
+            "bucket": ...,
+            "prefix": ...
+        },
+    }
 
-# Only allow notebook files to be stored in S3
-c.HybridContentsManager.path_validator = {
-    "shared": lambda path: path.endswith('.ipynb')
-}
-```
+    # Only allow notebook files to be stored in S3
+    c.HybridContentsManager.path_validator = {
+        "shared": lambda path: path.endswith('.ipynb')
+    }
 
 
 Testing
