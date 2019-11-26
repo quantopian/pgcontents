@@ -195,18 +195,11 @@ class HybridContentsManager(ContentsManager):
 
         path_is_valid = validator(path)
 
-        # Ensure return type is bool
-        if type(path_is_valid) is not bool:
-            raise HTTPError(
-                400,
-                "The provided path_validator for the prefix '{prefix}' does not return a boolean"
-                .format(prefix=prefix, path=path))
-
         if not path_is_valid:
             raise HTTPError(
-                401,
-                "The provided path_validator for the prefix '{prefix}' has flagged the path '{path}' as invalid."
-                .format(prefix=prefix, path=path))
+                405,
+                "The path '{path}' is not valid for the prefix '{prefix}'".
+                format(path=path, prefix=prefix))
 
         return path_is_valid
 

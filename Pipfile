@@ -20,7 +20,7 @@ psycopg2 = ">=2.6.1"
 requests = ">=2.7.0"
 six = ">=1.9.0"
 notebook = {extras = ["test"],version = ">=4.0"}
-hybrid-content-manager = {editable = true,extras = ["test"],path = "."}
+hybridcontents = {editable = true,extras = ["test"],path = "."}
 
 [requires]
 python_version = "3.6"

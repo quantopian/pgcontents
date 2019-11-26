@@ -21,7 +21,7 @@ from mock import Mock
 
 from IPython.utils.tempdir import TemporaryDirectory
 
-from hybrid_content_manager.hybridmanager import HybridContentsManager
+from hybridcontents.hybridmanager import HybridContentsManager
 
 from .testing_utils import assertRaisesHTTPError
 
@@ -323,13 +323,13 @@ class MultiRootTestCase(TestCase):
         old_path = 'Untitled.yaml'
         new_path = 'A/Untitled.yaml'
 
-        with assertRaisesHTTPError(self, 401):
+        with assertRaisesHTTPError(self, 405):
             cm.rename(old_path, new_path)
 
     def test_save_invalid_path(self):
         cm = self.contents_manager
 
-        with assertRaisesHTTPError(self, 401):
+        with assertRaisesHTTPError(self, 405):
             cm.new_untitled(path='A', ext='.yaml')
 
     def tearDown(self):
