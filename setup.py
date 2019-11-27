@@ -31,7 +31,7 @@ def main():
         license='Apache 2.0',
         include_package_data=True,
         zip_safe=True,
-        url="https://github.com/viaduct-ai/pgcontents",
+        url="https://github.com/viaduct-ai/hybridcontents",
         classifiers=[
             'Development Status :: 4 - Beta',
             'Framework :: IPython',
