@@ -21,7 +21,7 @@ from mock import Mock
 
 from IPython.utils.tempdir import TemporaryDirectory
 
-from hybridcontents.hybridmanager import HybridContentsManager
+from hybridcontents import HybridContentsManager
 
 from .testing_utils import assertRaisesHTTPError
 
