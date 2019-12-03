@@ -150,6 +150,10 @@ def path_dispatch_old_new(mname, returns_model):
     return _wrapper
 
 
+def DEFAULT_PATH_VALIDATOR(path):
+    return True
+
+
 class HybridContentsManager(ContentsManager):
     """ContentsManager subclass that delegates specific subdirectories to other
     ContentsManager/Checkpoints pairs."""
@@ -191,7 +195,8 @@ class HybridContentsManager(ContentsManager):
         return [base_directory_model(path) for path in self.managers if path]
 
     def _validate_path(self, prefix, path):
-        validator = self.path_validator.get(prefix, lambda path: True)
+
+        validator = self.path_validator.get(prefix, DEFAULT_PATH_VALIDATOR)
 
         path_is_valid = validator(path)
 
