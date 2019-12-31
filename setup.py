@@ -18,9 +18,6 @@ def read_requirements(basename):
 
 
 def main():
-    reqs = read_requirements('requirements.txt')
-    test_reqs = read_requirements('requirements_test.txt')
-
     setup(
         name='pgcontents',
         version='0.6',
