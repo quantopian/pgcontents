@@ -9,7 +9,7 @@ Getting Started
 ---------------
 **Prerequisites:**
  - Write access to an empty `PostgreSQL <http://www.postgresql.org>`_ database.
- - A Python installation with `Jupyter Notebook <https://github.com/jupyter/notebook>`_ >= 4.0.
+ - A Python installation with `Jupyter Notebook <https://github.com/jupyter/notebook>`_ >= 5.0.
 
 **Installation:**
 

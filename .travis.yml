@@ -1,15 +1,36 @@
 language: python
 sudo: false
 
-python:
-  - "2.7"
-  - "3.5"
-  - "3.6"
-env:
-  - NB_VERSION=4
-  - NB_VERSION=5
-  - FLAKE8=true NB_VERSION=5
-  - NOTEST=true NB_VERSION=5
+jobs:
+  include:
+    - name: "Python 2.7 - Notebook 5 Tests"
+      python: "2.7"
+      env:
+        - TOXENV=py27-notebook5
+    - name: "Python 3.5 - Notebook 5 Tests"
+      python: "3.5"
+      env:
+        - TOXENV=py35-notebook5
+    - name: "Python 3.6 - Notebook 5 Tests"
+      python: "3.6"
+      env:
+        - TOXENV=py36-notebook5
+    - name: "Python 3.5 - Notebook 6 Tests"
+      python: "3.5"
+      env:
+        - TOXENV=py35-notebook6
+    - name: "Python 3.6 - Notebook 6 Tests"
+      python: "3.6"
+      env:
+        - TOXENV=py36-notebook6
+    - name: "Check [tests] deps not required"
+      python: "3.5"
+      env:
+        - TOXENV=notest
+    - name: "Flake8"
+      python: "3.5"
+      env:
+        - TOXENV=flake8
 
 services:
   - postgresql
@@ -21,11 +42,7 @@ install:
   - pip install tox
 
 script:
-  - if [[ $TRAVIS_PYTHON_VERSION = '2.7' ]]; then tox -e py27-notebook$NB_VERSION; fi
-  - if [[ $TRAVIS_PYTHON_VERSION = '3.5' ]]; then tox -e py35-notebook$NB_VERSION; fi
-  - if [[ $TRAVIS_PYTHON_VERSION = '3.6' ]]; then tox -e py36-notebook$NB_VERSION; fi
-  - if [[ $FLAKE8 = 'true' ]]; then tox -e notest; fi
-  - if [[ $NOTEST = 'true' ]]; then tox -e flake8; fi
+  - tox
 
 branches:
   only:

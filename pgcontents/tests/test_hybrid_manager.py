@@ -11,13 +11,15 @@ from os.path import (
     join as osjoin,
 )
 from posixpath import join as pjoin
+from unittest import TestCase
 
 from six import (
     iteritems,
     itervalues,
 )
-from unittest import TestCase
 from IPython.utils.tempdir import TemporaryDirectory
+from notebook.services.contents.tests.test_manager import TestContentsManager
+from notebook.services.contents.tests.test_contents_api import APITest
 
 from pgcontents.hybridmanager import HybridContentsManager
 from pgcontents.pgmanager import PostgresContentsManager
@@ -29,7 +31,7 @@ from .utils import (
     remigrate_test_schema,
     TEST_DB_URL,
 )
-from ..utils.ipycompat import APITest, FileContentsManager, TestContentsManager
+from ..utils.ipycompat import FileContentsManager
 
 
 setup_module = remigrate_test_schema

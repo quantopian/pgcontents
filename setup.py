@@ -18,9 +18,6 @@ def read_requirements(basename):
 
 
 def main():
-    reqs = read_requirements('requirements.txt')
-    test_reqs = read_requirements('requirements_test.txt')
-
     setup(
         name='pgcontents',
         version='0.6',
@@ -45,9 +42,23 @@ def main():
             'Programming Language :: Python',
             'Topic :: Database',
         ],
-        install_requires=reqs,
+        install_requires=[
+            'SQLAlchemy>=1.0.5',
+            'alembic>=0.7.6',
+            'click>=3.3',
+            'cryptography>=1.4',
+            'psycopg2>=2.6.1',
+            'six>=1.9.0',
+            'notebook>=5.0',
+        ],
         extras_require={
-            'test': test_reqs,
+            'test': [
+                'notebook[test]',
+                'nose',
+                'nose-ignore-docstring',
+                'requests',
+                'mock',
+            ],
         },
         scripts=[
             'bin/pgcontents',

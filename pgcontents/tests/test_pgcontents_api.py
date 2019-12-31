@@ -24,6 +24,8 @@ from dateutil.parser import parse
 from six import iteritems
 
 from IPython.utils.tempdir import TemporaryDirectory
+from notebook.services.contents.tests.test_contents_api import APITest
+from notebook.tests.launchnotebook import assert_http_error
 from requests import HTTPError
 
 from ..constants import UNLIMITED
@@ -50,8 +52,11 @@ from .utils import (
     TEST_DB_URL,
 )
 from ..utils.ipycompat import (
-    APITest, Config, FileContentsManager, GenericFileCheckpoints, to_os_path,
-    assert_http_error)
+    Config,
+    FileContentsManager,
+    GenericFileCheckpoints,
+    to_os_path,
+)
 from ..utils.sync import walk, walk_dirs
 
 
