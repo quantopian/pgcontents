@@ -21,6 +21,8 @@ from base64 import b64encode
 from cryptography.fernet import Fernet
 from itertools import combinations
 
+from notebook.services.contents.tests.test_manager import TestContentsManager
+
 from pgcontents.pgmanager import PostgresContentsManager
 from .utils import (
     assertRaisesHTTPError,
@@ -31,7 +33,6 @@ from .utils import (
     remigrate_test_schema,
 )
 from ..crypto import FernetEncryption
-from ..utils.ipycompat import TestContentsManager
 from ..utils.sync import walk_files_with_content
 
 setup_module = remigrate_test_schema
