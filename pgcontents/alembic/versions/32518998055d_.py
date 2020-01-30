@@ -57,4 +57,3 @@ def downgrade():
         ),
         schema='pgcontents',
     )
-

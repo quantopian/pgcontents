@@ -1,0 +1,18 @@
+default_language_version:
+  python: python3.6
+
+repos:
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.1.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-symlinks
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://gitlab.com/pycqa/flake8
+    rev: 3.7.7
+    hooks:
+      - id: flake8

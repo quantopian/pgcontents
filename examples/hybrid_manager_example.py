@@ -6,7 +6,8 @@
 # directory, and all requests for data within that directory are routed to the
 # sub-manager.
 
-# A HybridContentsManager needs two pieces of information at configuration time:
+# A HybridContentsManager needs two pieces of information at configuration
+# time:
 
 # 1. ``manager_classes``, a map from root directory to the type of contents
 #    manager to use for that root directory.
@@ -21,7 +22,7 @@ from pgcontents.hybridmanager import HybridContentsManager
 # Using Legacy IPython.
 from IPython.html.services.contents.filemanager import FileContentsManager
 
-c = get_config()
+c = get_config()  # noqa
 
 c.NotebookApp.contents_manager_class = HybridContentsManager
 c.HybridContentsManager.manager_classes = {

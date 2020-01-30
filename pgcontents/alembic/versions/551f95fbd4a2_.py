@@ -36,4 +36,3 @@ def downgrade():
     op.alter_column('files', 'name', type_=sa.Unicode(40))
     for tablename, colname in tables_cols:
         op.alter_column(tablename, colname, type_=OldFilePath)
-

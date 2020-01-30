@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from cryptography.fernet import Fernet
 from getpass import getuser
 from itertools import starmap
+import os
 import posixpath
 from unicodedata import normalize
 
@@ -26,9 +27,12 @@ from ..utils.ipycompat import (
 )
 from ..utils.migrate import upgrade
 
-TEST_DB_URL = "postgresql://{user}@/pgcontents_testing".format(
-    user=getuser(),
-)
+
+TEST_DB_URL = os.environ.get('PGCONTENTS_TEST_DB_URL')
+if TEST_DB_URL is None:
+    TEST_DB_URL = "postgresql://{user}@/pgcontents_testing".format(
+        user=getuser(),
+    )
 
 
 def make_fernet():
