@@ -1,5 +1,5 @@
 from pgcontents import PostgresContentsManager
-c = get_config()
+c = get_config()  # noqa
 
 # Tell IPython to use PostgresContentsManager for all storage.
 c.NotebookApp.contents_manager_class = PostgresContentsManager
@@ -16,4 +16,4 @@ c.PostgresContentsManager.db_url = 'postgresql://ssanderson@/pgcontents'
 c.PostgresContentsManager.user_id = 'my_awesome_username'
 
 # Set a maximum file size, if desired.
-c.PostgresContentsManager.max_file_size_bytes = 1000000 # 1MB File cap
+c.PostgresContentsManager.max_file_size_bytes = 1000000  # 1MB File cap

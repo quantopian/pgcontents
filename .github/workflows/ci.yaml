@@ -1,0 +1,99 @@
+name: PGContents CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-python@v1
+        with:
+          python-version: 3.6
+      - uses: actions/cache@v1
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - uses: pre-commit/action@v1.0.1
+
+  tests:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+      matrix:
+        name:
+          - py27-notebook5
+          - py35-notebook5
+          - py36-notebook5
+
+          - py35-notebook6
+          - py36-notebook6
+
+        include:
+          - name: py27-notebook5
+            python-version: 2.7
+
+          - name: py35-notebook5
+            python-version: 3.5
+
+          - name: py36-notebook5
+            python-version: 3.6
+
+          - name: py35-notebook6
+            python-version: 3.5
+
+          - name: py36-notebook6
+            python-version: 3.6
+
+    services:
+      postgres:
+        image: "postgres:9.5-alpine"
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: pgcontents_testing
+          POSTGRES_USER: pgcontents_user
+          POSTGRES_PASSWORD: pgcontents_pass
+
+    steps:
+
+      - name: Dump Matrix Config
+        env:
+          MATRIX: ${{ toJson(matrix) }}
+        run: echo "$MATRIX"
+
+      - name: Checkout Repository
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/cache@v1
+        with:
+          path: ~/.cache/pip
+          key: ${{ matrix.name }}-pip-${{ hashFiles('**/*_constraints.txt') }}
+
+      - name: Setup LibPQ
+        run: |
+          sudo apt-get update
+          sudo apt-get install libpq-dev
+
+      - name: Install Tox
+        run: |
+          python -m pip install -U pip setuptools
+          python -m pip install tox
+
+      - name: Run Tox
+        run: tox -e ${{ matrix.name }}
+        env:
+          PGCONTENTS_TEST_DB_URL: "postgresql://pgcontents_user:pgcontents_pass@localhost/pgcontents_testing"
