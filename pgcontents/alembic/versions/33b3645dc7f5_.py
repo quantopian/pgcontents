@@ -33,7 +33,7 @@ def upgrade():
     sa.CheckConstraint(u'(parent_name IS NULL AND parent_user_id IS NULL) OR (parent_name IS NOT NULL AND parent_user_id IS NOT NULL)', name=u'directories_null_user_id_match'),
     sa.CheckConstraint(u'position(parent_name in name) != 0', name=u'directories_parent_name_prefix'),
     sa.CheckConstraint(u'user_id = parent_user_id', name=u'directories_match_user_id'),
-    sa.ForeignKeyConstraint(['parent_user_id', 'parent_name'], [u'directories.user_id', u'directories.name'], ),
+    sa.ForeignKeyConstraint(['parent_user_id', 'parent_name'], [u'directories.user_id', u'directories.name'], name=u'directories_parent_user_id_fkey'),
     sa.ForeignKeyConstraint(['user_id'], [u'users.id'], ),
     sa.PrimaryKeyConstraint('user_id', 'name')
     )
