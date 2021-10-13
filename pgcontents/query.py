@@ -510,7 +510,7 @@ def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
     )
     directory, name = split_api_filepath(path)
     with db.begin_nested() as savepoint:
-        try:
+        if not file_exists(db, user_id, path):
             res = db.execute(
                 files.insert().values(
                     name=name,
@@ -519,22 +519,16 @@ def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
                     content=content,
                 )
             )
-        except IntegrityError as error:
-            # The file already exists, so overwrite its content with the newer
-            # version.
-            if is_unique_violation(error):
-                savepoint.rollback()
-                res = db.execute(
-                    files.update().where(
-                        _file_where(user_id, path),
-                    ).values(
-                        content=content,
-                        created_at=func.now(),
-                    )
+        else:
+            # The file already exists, so overwrite its content with the newer version.
+            res = db.execute(
+                files.update().where(
+                    _file_where(user_id, path),
+                ).values(
+                    content=content,
+                    created_at=func.now(),
                 )
-            else:
-                # Unknown error.  Reraise
-                raise
+            )
 
     return res
 
