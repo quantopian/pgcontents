@@ -11,6 +11,9 @@ Getting Started
  - Write access to an empty `PostgreSQL <http://www.postgresql.org>`_ database.
  - A Python installation with `Jupyter Notebook <https://github.com/jupyter/notebook>`_ >= 5.0.
 
+PGContents will put its table in the `pgcontents` namespace. When you log onto the PostgreSQL database server, make
+sure the `pgcontents` schema is in the search path (e.g., `set search_path to 'pgcontents'`; see `PostgreSQL documentation`_).
+
 **Installation:**
 
 0. Install ``pgcontents`` from PyPI via ``pip install pgcontents``.
@@ -23,3 +26,4 @@ Demo Video
 You can see a demo of PGContents in action in `this presentation from JupyterCon 2017`_.
 
 .. _`this presentation from JupyterCon 2017` : https://youtu.be/TtsbspKHJGo?t=917
+.. _`PostgreSQL documentation` : https://www.postgresql.org/docs/14/ddl-schemas.html#DDL-SCHEMAS-PATH
