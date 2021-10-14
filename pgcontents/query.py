@@ -10,6 +10,7 @@ from sqlalchemy import (
     select,
     Unicode,
 )
+from sqlalchemy.dialects.postgresql import insert
 
 from sqlalchemy.exc import IntegrityError
 
@@ -500,8 +501,6 @@ def rename_directory(db, user_id, old_api_path, new_api_path):
 def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
     """
     Save a file.
-
-    TODO: Update-then-insert is probably cheaper than insert-then-update.
     """
     content = preprocess_incoming_content(
         content,
@@ -509,26 +508,20 @@ def save_file(db, user_id, path, content, encrypt_func, max_size_bytes):
         max_size_bytes,
     )
     directory, name = split_api_filepath(path)
-    with db.begin_nested() as savepoint:
-        if not file_exists(db, user_id, path):
-            res = db.execute(
-                files.insert().values(
-                    name=name,
-                    user_id=user_id,
-                    parent_name=directory,
-                    content=content,
-                )
+    with db.begin_nested():
+        res = db.execute(
+            insert(files)
+            .values(
+                name=name,
+                user_id=user_id,
+                parent_name=directory,
+                content=content,
             )
-        else:
-            # The file already exists, so overwrite its content with the newer version.
-            res = db.execute(
-                files.update().where(
-                    _file_where(user_id, path),
-                ).values(
-                    content=content,
-                    created_at=func.now(),
-                )
-            )
+            .on_conflict_do_update(constraint="uix_filepath_username", set_={
+                "content": content,
+                "created_at": func.now()
+            })
+        )
 
     return res
 
